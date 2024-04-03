@@ -16,7 +16,13 @@ async fn download_youtube_video(url: String) -> Result<String, String> {
 
     let video_id = video_info.video_details.video_id;
 
-    let path = std::path::Path::new("../public").join(&video_id).with_extension("mp4");
+    let path = std::path::Path::new("../public")
+        .join(&video_id)
+        .with_extension("mp4");
+
+    if path.exists() {
+        return Ok(video_id);
+    }
 
     video.download(path).await.unwrap();
 
