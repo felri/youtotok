@@ -1,6 +1,7 @@
 // /* eslint-disable func-names */
 import { useState, useRef, useEffect } from "react";
-import type { EditorProps, GrabberProps } from "./types";
+import type { EditorProps, GrabberProps, Timings } from "./types";
+import AudioVisualizer from "./AudioWave";
 import "./Editor.css";
 import {
   FaSync,
@@ -16,7 +17,50 @@ import {
   FaPlay,
 } from "react-icons/fa";
 
-function Editor({ videoUrl, timings, setTimings }: EditorProps) {
+const Timestamp = (props: { time: number; className?: string }) => {
+  const time = props.time;
+  const hours = Math.floor(time / 3600);
+  const minutes = Math.floor((time - hours * 3600) / 60);
+  const seconds = Math.floor(time - hours * 3600 - minutes * 60);
+  return (
+    <span className={props.className + " text-white absolute -top-7"}>
+      {hours}:{minutes < 10 ? "0" : ""}
+      {minutes}:{seconds < 10 ? "0" : ""}
+      {seconds}
+    </span>
+  );
+};
+
+const Grabber = () => (
+  <svg
+    version="1.1"
+    xmlns="http://www.w3.org/2000/svg"
+    x="0"
+    y="0"
+    width="10"
+    height="14"
+    viewBox="0 0 10 14"
+    xmlSpace="preserve"
+  >
+    <path
+      className="st0"
+      d="M1 14L1 14c-0.6 0-1-0.4-1-1V1c0-0.6 0.4-1 1-1h0c0.6 0 1 0.4 1 1v12C2 13.6 1.6 14 1 14zM5 14L5 14c-0.6 0-1-0.4-1-1V1c0-0.6 0.4-1 1-1h0c0.6 0 1 0.4 1 1v12C6 13.6 5.6 14 5 14zM9 14L9 14c-0.6 0-1-0.4-1-1V1c0-0.6 0.4-1 1-1h0c0.6 0 1 0.4 1 1v12C10 13.6 9.6 14 9 14z"
+    />
+  </svg>
+);
+
+function Editor({ videoUrl }: EditorProps) {
+  const [timings, setTimings] = useState<Timings[]>([
+    {
+      start: 0,
+      end: 0,
+    },
+  ]);
+
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const [dragging, setDragging] = useState(false);
+
   //Boolean state to handle video mute
   const [isMuted, setIsMuted] = useState(false);
 
@@ -38,17 +82,11 @@ function Editor({ videoUrl, timings, setTimings }: EditorProps) {
   //State for imageUrl
   const [imageUrl, setImageUrl] = useState("");
 
-  //Boolean state handling trimmed video
-  const [trimmingDone, setTrimmingDone] = useState(false);
-
-  //Integer state to blue progress bar as video plays
-  const [seekerBar, setSeekerBar] = useState(0);
+  // //Integer state to blue progress bar as video plays
+  // const [seekerBar, setSeekerBar] = useState(0);
 
   //Ref handling metadata needed for trim markers
   const currentlyGrabbedRef = useRef({ index: 0, type: "none" });
-
-  //Ref handling the trimmed video element
-  const trimmedVidRef = useRef<HTMLVideoElement>(null);
 
   //Ref handling the initial video element for trimming
   const playVideoRef = useRef<HTMLVideoElement>(null);
@@ -66,147 +104,118 @@ function Editor({ videoUrl, timings, setTimings }: EditorProps) {
     ),
   };
 
-  //State handling storing of the trimmed video
-  const [trimmedVideo, setTrimmedVideo] = useState<string | null>(null);
-
-  //Boolean state handling whether ffmpeg has loaded or not
-  const [ready, setReady] = useState(false);
-
-  //Function handling loading in ffmpeg
-  const load = async () => {
-    try {
-      setReady(true);
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
-  //Loading in ffmpeg when this component renders
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  //Lifecycle handling the logic needed for the progress bar - displays the blue bar that grows as the video plays
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (playVideoRef?.current?.onloadedmetadata) {
-      const currentIndex = currentlyGrabbedRef.current.index;
-      const seek =
-        ((playVideoRef.current.currentTime - timings[0].start) /
-          playVideoRef.current.duration) *
-        100;
-      setSeekerBar(seek);
-      if (progressBarRef.current)
-        progressBarRef.current.style.width = `${seekerBar}%`;
-
-      if (playVideoRef.current.currentTime >= timings[0].end) {
-        playVideoRef.current.pause();
-        setPlaying(false);
-        currentlyGrabbedRef.current = {
-          index: currentIndex + 1,
-          type: "start",
-        };
-        if (progressBarRef.current) {
-          progressBarRef.current.style.width = "0%";
-          progressBarRef.current.style.left = `${
-            (timings[0].start / playVideoRef.current.duration) * 100
-          }%`;
-        }
-        playVideoRef.current.currentTime = timings[0].start;
-      }
+    if (playVideoRef.current) {
+      playVideoRef.current.onloadedmetadata = () => {
+        setTimings([{ start: 0, end: playVideoRef?.current?.duration || 0 }]);
+      };
     }
+  }, [playVideoRef.current]);
 
-    window.addEventListener("keyup", (event) => {
+  useEffect(() => {
+    const handleKeyUp = (event: KeyboardEvent) => {
       if (event.key === " ") {
         playPause();
       }
-    });
+    };
 
-    //Handles the start and end metadata for the timings state
-    const time = timings;
-    if (playVideoRef.current) {
-      playVideoRef.current.onloadedmetadata = () => {
-        if (time.length === 0) {
-          time.push({ start: 0, end: playVideoRef?.current?.duration || 0 });
-          setTimings(time);
-          addActiveSegments();
-        } else {
-          addActiveSegments();
-        }
-      };
-    }
-  });
+    window.addEventListener("keyup", handleKeyUp);
 
-  //Lifecycle that handles removing event listener from the mouse event on trimmer - Desktop browser
+    return () => {
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [playing]);
+
   useEffect(() => {
-    return window.removeEventListener("mouseup", removeMouseMoveEventListener);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    addActiveSegments();
+  }, [timings]);
 
-  //Lifecycle that handles removing event listener from the touch/pointer event on trimmer - mobile browser
-  useEffect(() => {
-    return window.removeEventListener(
-      "pointerup",
-      removePointerMoveEventListener
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  //Function handling the trimmer movement logic
   const handleMouseMoveWhenGrabbed = (event: MouseEvent) => {
-    if (playVideoRef.current) {
-      playVideoRef.current.pause();
-      addActiveSegments();
-      if (playBackBarRef.current) {
-        let playbackRect = playBackBarRef.current.getBoundingClientRect();
-        let seekRatio =
-          (event.clientX - playbackRect.left) / playbackRect.width;
-        const index = currentlyGrabbedRef.current.index;
-        const type = currentlyGrabbedRef.current.type;
-        let time = timings;
-        let seek = playVideoRef.current.duration * seekRatio;
-        if (progressBarRef.current) {
-          if (
-            type === "start" &&
-            seek > (index !== 0 ? time[index - 1].end + difference + 0.2 : 0) &&
-            seek < time[index].end - difference
-          ) {
-            progressBarRef.current.style.left = `${seekRatio * 100}%`;
-            playVideoRef.current.currentTime = seek;
-            time[index]["start"] = seek;
-            setPlaying(false);
-            setTimings(time);
-          } else if (
-            type === "end" &&
-            seek > time[index].start + difference &&
-            seek <
-              (index !== timings.length - 1
-                ? time[index].start - difference - 0.2
-                : playVideoRef.current.duration)
-          ) {
-            progressBarRef.current.style.left = `${
-              (time[index].start / playVideoRef.current.duration) * 100
-            }%`;
-            playVideoRef.current.currentTime = time[index].start;
-            time[index]["end"] = seek;
-            setPlaying(false);
-            setTimings(time);
-          }
-          progressBarRef.current.style.width = "0%";
-        }
-      }
+    if (
+      !playVideoRef.current ||
+      !playBackBarRef.current ||
+      !progressBarRef.current
+    ) {
+      return;
+    }
+
+    setDragging(true);
+    playPause();
+
+    const playbackRect = playBackBarRef.current.getBoundingClientRect();
+    const seekRatio = calculateSeekRatio(event.clientX, playbackRect);
+    const { index, type } = currentlyGrabbedRef.current;
+    const seekTime = calculateSeekTime(
+      playVideoRef.current.duration,
+      seekRatio
+    );
+
+    if (type === "start") {
+      handleStartType(seekTime, seekRatio, index);
+    } else if (type === "end") {
+      handleEndType(seekTime, index);
+    }
+
+    setTimings(timings);
+    setCurrentTime(seekTime);
+    progressBarRef.current.style.width = "0%";
+
+    // playVideoRef.current.currentTime = seekTime;
+  };
+
+  const calculateSeekRatio = (clientX: number, playbackRect: DOMRect) => {
+    return (clientX - playbackRect.left) / playbackRect.width;
+  };
+
+  const calculateSeekTime = (duration: number, seekRatio: number) => {
+    return duration * seekRatio;
+  };
+
+  const handleStartType = (
+    seekTime: number,
+    seekRatio: number,
+    index: number
+  ) => {
+    if (!progressBarRef.current || !playVideoRef.current) {
+      return;
+    }
+
+    if (
+      seekTime >
+        (index !== 0 ? timings[index - 1].end + difference + 0.2 : 0) &&
+      seekTime < timings[index].end - difference
+    ) {
+      progressBarRef.current.style.left = `${seekRatio * 100}%`;
+      playVideoRef.current.currentTime = seekTime;
+      timings[index]["start"] = seekTime;
+    }
+  };
+
+  const handleEndType = (seekTime: number, index: number) => {
+    if (!progressBarRef.current || !playVideoRef.current) {
+      return;
+    }
+
+    console.log("Seek Time: ", seekTime);
+
+    if (
+      seekTime > timings[index].start + difference &&
+      seekTime < playVideoRef.current.duration
+    ) {
+      progressBarRef.current.style.left = `${
+        (timings[index].start / playVideoRef.current.duration) * 100
+      }%`;
+      playVideoRef.current.currentTime = timings[index].start;
+      timings[index]["end"] = seekTime;
     }
   };
 
   //Function that handles removing event listener from the mouse event on trimmer - Desktop browser
   const removeMouseMoveEventListener = () => {
     window.removeEventListener("mousemove", handleMouseMoveWhenGrabbed);
-  };
-
-  //Lifecycle that handles removing event listener from the mouse event on trimmer - Mobile browser
-  const removePointerMoveEventListener = () => {
-    window.removeEventListener("pointermove", handleMouseMoveWhenGrabbed);
+    window.removeEventListener("mouseup", removeMouseMoveEventListener);
+    setDragging(false);
+    addActiveSegments();
   };
 
   //Function handling reset logic
@@ -290,33 +299,24 @@ function Editor({ videoUrl, timings, setTimings }: EditorProps) {
 
   //Function handling play and pause logic
   const playPause = () => {
+    if (!playVideoRef.current || !progressBarRef.current) {
+      return;
+    }
+
     if (playing) {
-      if (playVideoRef.current) {
-        playVideoRef.current.pause();
-      }
+      playVideoRef.current.pause();
     } else {
-      if (
-        playVideoRef.current &&
-        playVideoRef.current.currentTime >= timings[0].end
-      ) {
-        if (playVideoRef.current) {
-          playVideoRef.current.pause();
-          playVideoRef.current.currentTime = timings[0].start;
-        }
-        setPlaying(false);
+      if (playVideoRef.current.currentTime >= timings[timings.length - 1].end) {
+        playVideoRef.current.pause();
+        playVideoRef.current.currentTime = timings[0].start;
+
         currentlyGrabbedRef.current = { index: 0, type: "start" };
-        if (progressBarRef.current) {
-          progressBarRef.current.style.left = `${
-            (timings[0].start /
-              (playVideoRef.current ? playVideoRef.current.duration : 1)) *
-            100
-          }%`;
-          progressBarRef.current.style.width = "0%";
-        }
+        progressBarRef.current.style.left = `${
+          (timings[0].start / playVideoRef.current.duration) * 100
+        }%`;
+        progressBarRef.current.style.width = "0%";
       }
-      if (playVideoRef.current) {
-        playVideoRef.current.play();
-      }
+      playVideoRef?.current?.play();
     }
     setPlaying(!playing);
   };
@@ -335,37 +335,38 @@ function Editor({ videoUrl, timings, setTimings }: EditorProps) {
   };
 
   //Function handling updating progress logic (clicking on progress bar to jump to different time durations)
-  const updateProgress = (event: MouseEvent) => {
-    if (
-      playBackBarRef.current &&
-      playVideoRef.current &&
-      progressBarRef.current
-    ) {
-      let playbackRect = playBackBarRef.current.getBoundingClientRect();
-      let seekTime =
-        ((event.clientX - playbackRect.left) / playbackRect.width) *
-        playVideoRef.current.duration;
-      playVideoRef.current.pause();
-      // find where seekTime is in the segment
-      let index = -1;
-      let counter = 0;
-      for (let times of timings) {
-        if (seekTime >= times.start && seekTime <= times.end) {
-          index = counter;
-        }
-        counter += 1;
-      }
-      if (index === -1) {
-        return;
-      }
-      setPlaying(false);
-      currentlyGrabbedRef.current = { index: index, type: "start" };
-      progressBarRef.current.style.width = "0%"; // Since the width is set later, this is necessary to hide weird UI
-      progressBarRef.current.style.left = `${
-        (timings[index].start / playVideoRef.current.duration) * 100
-      }%`;
-      playVideoRef.current.currentTime = seekTime;
+  const updateProgress = (event: any) => {
+    if (dragging) return;
+
+    const playbackRect = playBackBarRef.current?.getBoundingClientRect();
+
+    if (!playbackRect || !playVideoRef.current) {
+      return;
     }
+
+    const seekTime =
+      ((event.clientX - playbackRect?.left) / playbackRect?.width) *
+      playVideoRef.current.duration;
+
+    let index = -1;
+    for (let i = 0; i < timings.length; i++) {
+      const { start, end } = timings[i];
+      if (seekTime >= start && seekTime <= end) {
+        index = i;
+        break;
+      }
+    }
+
+    if (index === -1) return;
+
+    currentlyGrabbedRef.current = { index, type: "start" };
+    progressBarRef.current?.style.setProperty("width", "0%");
+    progressBarRef.current?.style.setProperty(
+      "left",
+      `${(timings[index].start / playVideoRef.current.duration) * 100}%`
+    );
+    console.log("Seek Time: ", seekTime);
+    playVideoRef.current.currentTime = seekTime;
   };
 
   //Function handling adding new trim markers logic
@@ -386,7 +387,7 @@ function Editor({ videoUrl, timings, setTimings }: EditorProps) {
 
   //Function handling first step of deleting trimmer
   const preDeleteGrabber = () => {
-    if (deletingGrabber) {
+    if (deletingGrabber.deletingGrabber) {
       setDeletingGrabber({ deletingGrabber: false, currentWarning: null });
     } else {
       setDeletingGrabber({
@@ -423,37 +424,104 @@ function Editor({ videoUrl, timings, setTimings }: EditorProps) {
     addActiveSegments();
   };
 
-  //Function handling logic of time segments throughout videos duration
   const addActiveSegments = () => {
     if (!playVideoRef.current || !playBackBarRef.current) {
       return;
     }
 
-    let colors = "";
-    let counter = 0;
-    colors += `, rgb(240, 240, 240) 0%, rgb(240, 240, 240) ${
-      (timings[0].start / playVideoRef.current.duration) * 100
-    }%`;
+    const videoLength = playVideoRef.current.duration;
+    const inactiveColor = "#aaaa"; // Semi-transparent gray color
+    const activeColor = "#fff"; // White color
 
-    for (let times of timings) {
-      if (counter > 0) {
-        colors += `, rgb(240, 240, 240) ${
-          (timings[counter].end / playVideoRef.current.duration) * 100
-        }%, rgb(240, 240, 240) ${
-          (times.start / playVideoRef.current.duration) * 100
-        }%`;
+    let colorStops = [];
+    let overlays = [];
+
+    // remove all overlay divs
+    const overlayDivs = document.querySelectorAll("#overlay");
+    overlayDivs.forEach((div) => {
+      div.remove();
+    });
+
+    // Add initial inactive segment
+    colorStops.push(`${inactiveColor} 0%`);
+
+    for (let i = 0; i < timings.length; i++) {
+      const currentSegment = timings[i];
+      const nextSegment = timings[i + 1];
+
+      // Add inactive segment before the current active segment
+      const inactiveStart =
+        i === 0 ? 0 : (timings[i - 1].end / videoLength) * 100;
+      const inactiveEnd = (currentSegment.start / videoLength) * 100;
+      colorStops.push(
+        `${inactiveColor} ${inactiveStart}%, ${inactiveColor} ${inactiveEnd}%`
+      );
+
+      // Add overlay div for inactive segment
+      overlays.push({
+        start: inactiveStart,
+        end: inactiveEnd,
+      });
+
+      // Add active segment
+      const activeStart = inactiveEnd;
+      const activeEnd = (currentSegment.end / videoLength) * 100;
+      colorStops.push(
+        `${activeColor} ${activeStart}%, ${activeColor} ${activeEnd}%`
+      );
+
+      // Add inactive segment after the current active segment (if there is a next segment)
+      if (nextSegment) {
+        const nextInactiveStart = activeEnd;
+        const nextInactiveEnd = (nextSegment.start / videoLength) * 100;
+        colorStops.push(
+          `${inactiveColor} ${nextInactiveStart}%, ${inactiveColor} ${nextInactiveEnd}%`
+        );
+
+        // Check if overlay already exists
+        const overlayExists = overlays.some(
+          (overlay) =>
+            overlay.start === nextInactiveStart &&
+            overlay.end === nextInactiveEnd
+        );
+        if (!overlayExists) {
+          // Add overlay div for inactive segment
+          overlays.push({
+            start: nextInactiveStart,
+            end: nextInactiveEnd,
+          });
+        }
       }
-      colors += `, #ccc ${
-        (times.start / playVideoRef.current.duration) * 100
-      }%, #ccc ${(times.end / playVideoRef.current.duration) * 100}%`;
-      counter += 1;
     }
 
-    colors += `, rgb(240, 240, 240) ${
-      (timings[counter - 1].end / playVideoRef.current.duration) * 100
-    }%, rgb(240, 240, 240) 100%`;
+    // Add final inactive segment
+    const finalInactiveStart =
+      (timings[timings.length - 1].end / videoLength) * 100 + 1;
+    colorStops.push(
+      `${inactiveColor} ${finalInactiveStart}%, ${inactiveColor} 100%`
+    );
 
-    playBackBarRef.current.style.background = `linear-gradient(to right${colors})`;
+    // Add overlay div for final inactive segment
+    overlays.push({
+      start: finalInactiveStart,
+      end: 100,
+    });
+
+    const gradientColors = colorStops.join(", ");
+    playBackBarRef.current.style.background = `linear-gradient(to right, ${gradientColors})`;
+
+    // Create overlay divs
+    overlays.forEach((overlay) => {
+      const div = document.createElement("div");
+      div.style.position = "absolute";
+      div.id = "overlay";
+      div.style.left = `${overlay.start}%`;
+      div.style.width = `${overlay.end - overlay.start}%`;
+      div.style.height = "100%";
+      div.style.zIndex = "10";
+      div.style.backgroundColor = "#aaaa";
+      playBackBarRef?.current?.appendChild(div);
+    });
   };
 
   // Function handling logic for post trimmed video
@@ -470,191 +538,160 @@ function Editor({ videoUrl, timings, setTimings }: EditorProps) {
 
     console.log("Trimmed Duration: ", trimmedVideo);
     console.log("Trim End: ", trimEnd);
+  };
 
-    try {
-      setTrimmingDone(true);
-      // setLottiePlaying(false)
-    } catch (error) {
-      console.log(error);
+  //Function handling the progress bar logic
+  const handleTimeUpdate = () => {
+    if (!playVideoRef.current || !progressBarRef.current) {
+      return;
+    }
+
+    const playVideo = playVideoRef.current;
+
+    if (!dragging) {
+      const seek =
+        ((playVideoRef.current.currentTime - timings[0].start) /
+          playVideoRef.current.duration) *
+        100;
+      progressBarRef.current.style.width = `${seek}%`;
+      setCurrentTime(playVideoRef.current.currentTime);
+
+      const pastSegment = timings.find(
+        (segment) => playVideo.currentTime >= segment.end
+      );
+
+      const currentSegment = timings.find(
+        (segment) =>
+          playVideo.currentTime >= segment.start &&
+          playVideo.currentTime <= segment.end
+      );
+
+      const futureSegment = timings.find(
+        (segment) => playVideo.currentTime < segment.start
+      );
+
+      if (!currentSegment && futureSegment) {
+        playVideo.currentTime = futureSegment.start;
+        return;
+      }
+
+      if (!currentSegment && pastSegment) {
+        playVideo.currentTime = pastSegment.start;
+        return;
+      }
+
+      if (!currentSegment && !pastSegment && !futureSegment) {
+        playVideo.currentTime = timings[0].start;
+        return;
+      }
+
+      if (currentSegment) {
+        // set progressbar position based on the current segment
+        progressBarRef.current.style.left = `${
+          (timings[0].start / playVideo.duration) * 100
+        }%`;
+      }
     }
   };
 
   return (
     <div className="wrapper">
-      {/* Video element for the trimmed video */}
-      {trimmingDone ? (
-        <div
-          style={{
-            maxHeight: "100vh",
-            marginTop: "50vh",
-          }}
-        >
-          <video
-            style={{
-              width: "100%",
-              marginTop: "100px",
-              borderRadius: "20px",
-              border: "4px solid #0072cf",
-            }}
-            ref={trimmedVidRef}
-            controls
-            // autoload="metadata"
-            onClick={() => console.log(trimmedVidRef?.current?.duration)}
-          >
-            {trimmedVideo && <source src={trimmedVideo} type="video/mp4" />}
-          </video>
-        </div>
-      ) : null}
       {/* Main video element for the video editor */}
       <video
         className="video"
         // autoload="metadata"
         muted={isMuted}
         ref={playVideoRef}
-        onLoadedData={() => {
-          console.log(playVideoRef);
-          playPause();
-        }}
-        onClick={() => {
-          playPause();
-        }}
-        onTimeUpdate={() => {
-          setSeekerBar(Number(progressBarRef?.current?.style.width) || 0);
-        }}
+        onLoadedData={playPause}
+        onClick={playPause}
+        onTimeUpdate={handleTimeUpdate}
       >
         <source src={videoUrl} type="video/mp4" />
       </video>
       <div className="playback">
+        <Timestamp time={0} />
         {/* If there is an instance of the playVideoRef, render the trimmer markers */}
-        {playVideoRef.current
-          ? Array.from(timings).map((timing, index) => (
-              <div key={index}>
-                <div key={"grabber_" + index}>
-                  {/* Markup and logic for the start trim marker */}
-                  <div
-                    id="grabberStart"
-                    className="grabber start"
-                    style={{
-                      left: `${
-                        (timings[0].start /
-                          (playVideoRef?.current?.duration || 1)) *
-                        100
-                      }%`,
-                    }}
-                    // Events for desktop - Start marker
-                    onMouseDown={(event) => {
-                      if (deletingGrabber) {
-                        deleteGrabber(index);
-                      } else {
-                        currentlyGrabbedRef.current = {
-                          index: index,
-                          type: "start",
-                        };
-                        window.addEventListener(
-                          "mousemove",
-                          handleMouseMoveWhenGrabbed
-                        );
-                        window.addEventListener(
-                          "mouseup",
-                          removeMouseMoveEventListener
-                        );
-                      }
-                    }}
-                    //Events for mobile - Start marker
-                    onPointerDown={() => {
-                      if (deletingGrabber) {
-                        deleteGrabber(index);
-                      } else {
-                        currentlyGrabbedRef.current = {
-                          index: index,
-                          type: "start",
-                        };
-                        window.addEventListener(
-                          "pointermove",
-                          handleMouseMoveWhenGrabbed
-                        );
-                        window.addEventListener(
-                          "pointerup",
-                          removePointerMoveEventListener
-                        );
-                      }
-                    }}
-                  >
-                    <svg
-                      version="1.1"
-                      xmlns="http://www.w3.org/2000/svg"
-                      x="0"
-                      y="0"
-                      width="10"
-                      height="14"
-                      viewBox="0 0 10 14"
-                      xmlSpace="preserve"
-                    >
-                      <path
-                        className="st0"
-                        d="M1 14L1 14c-0.6 0-1-0.4-1-1V1c0-0.6 0.4-1 1-1h0c0.6 0 1 0.4 1 1v12C2 13.6 1.6 14 1 14zM5 14L5 14c-0.6 0-1-0.4-1-1V1c0-0.6 0.4-1 1-1h0c0.6 0 1 0.4 1 1v12C6 13.6 5.6 14 5 14zM9 14L9 14c-0.6 0-1-0.4-1-1V1c0-0.6 0.4-1 1-1h0c0.6 0 1 0.4 1 1v12C10 13.6 9.6 14 9 14z"
-                      />
-                    </svg>
-                  </div>
-                  {/* Markup and logic for the end trim marker */}
-                  <div
-                    id="grabberEnd"
-                    className="grabber end"
-                    style={{
-                      left: `${
-                        (timings[0].end /
-                          (playVideoRef?.current?.duration || 1)) *
-                        100
-                      }%`,
-                    }}
-                    //Events for desktop - End marker
-                    onMouseDown={() => {
-                      if (deletingGrabber) {
-                        deleteGrabber(index);
-                      } else {
-                        currentlyGrabbedRef.current = {
-                          index: index,
-                          type: "end",
-                        };
-                        window.addEventListener(
-                          "mousemove",
-                          handleMouseMoveWhenGrabbed
-                        );
-                        window.addEventListener(
-                          "mouseup",
-                          removeMouseMoveEventListener
-                        );
-                      }
-                    }}
-                  >
-                    <svg
-                      version="1.1"
-                      xmlns="http://www.w3.org/2000/svg"
-                      x="0"
-                      y="0"
-                      width="10"
-                      height="14"
-                      viewBox="0 0 10 14"
-                      xmlSpace="preserve"
-                    >
-                      <path
-                        className="st0"
-                        d="M1 14L1 14c-0.6 0-1-0.4-1-1V1c0-0.6 0.4-1 1-1h0c0.6 0 1 0.4 1 1v12C2 13.6 1.6 14 1 14zM5 14L5 14c-0.6 0-1-0.4-1-1V1c0-0.6 0.4-1 1-1h0c0.6 0 1 0.4 1 1v12C6 13.6 5.6 14 5 14zM9 14L9 14c-0.6 0-1-0.4-1-1V1c0-0.6 0.4-1 1-1h0c0.6 0 1 0.4 1 1v12C10 13.6 9.6 14 9 14z"
-                      />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-            ))
-          : []}
+        {timings.map((timing, index) => (
+          <div key={"segment_" + index} className="segment">
+            <div
+              id="grabberStart"
+              className="grabber start z-30"
+              onMouseDown={() => {
+                // set time to start based on the position of the mouse X
+                if (deletingGrabber.deletingGrabber) {
+                  deleteGrabber(index);
+                } else {
+                  currentlyGrabbedRef.current = {
+                    index: index,
+                    type: "start",
+                  };
+                  window.addEventListener(
+                    "mousemove",
+                    handleMouseMoveWhenGrabbed
+                  );
+                  window.addEventListener(
+                    "mouseup",
+                    removeMouseMoveEventListener
+                  );
+                }
+              }}
+              style={{
+                left: `${
+                  (timing.start / (playVideoRef?.current?.duration || 1)) * 100
+                }%`,
+              }}
+            >
+              <Grabber />
+            </div>
+            {/* Markup and logic for the end trim marker */}
+            <div
+              id="grabberEnd"
+              className="grabber end z-30"
+              style={{
+                left: `${
+                  (timing.end / (playVideoRef?.current?.duration || 1)) * 100
+                }%`,
+              }}
+              //Events for desktop - End marker
+              onMouseDown={() => {
+                if (deletingGrabber.deletingGrabber) {
+                  deleteGrabber(index);
+                } else {
+                  currentlyGrabbedRef.current = {
+                    index: index,
+                    type: "end",
+                  };
+                  window.addEventListener(
+                    "mousemove",
+                    handleMouseMoveWhenGrabbed
+                  );
+                  window.addEventListener(
+                    "mouseup",
+                    removeMouseMoveEventListener
+                  );
+                }
+              }}
+            >
+              <Grabber />
+            </div>
+          </div>
+        ))}
         <div
-          className="seekable"
+          className="seekable relative"
           ref={playBackBarRef}
-          // onClick={updateProgress}
+          onClick={updateProgress}
         ></div>
-        <div className="progress" ref={progressBarRef}></div>
+        <div className="progress relative" ref={progressBarRef}>
+          <div className="absolute top-0 left-0 w-full h-full">
+            <Timestamp time={currentTime} className="-right-5" />
+          </div>
+        </div>
+        <Timestamp
+          time={playVideoRef?.current?.duration || 0}
+          className="-right-5"
+        />
       </div>
-
+      {/* <AudioVisualizer src={videoUrl} isVideo={true} /> */}
       <div className="controls">
         <div className="player-controls">
           <button
@@ -702,31 +739,30 @@ function Editor({ videoUrl, timings, setTimings }: EditorProps) {
             <FaStepForward />
           </button>
         </div>
-        <div>
+        <div className="flex justify-center items-center space-x-2">
           <button
             title="Add grabber"
-            className="trim-control margined"
+            className="play-control margined flex justify-center items-center"
             onClick={addGrabber}
           >
-            Add <FaGripLinesVertical />
+            ADD <FaGripLinesVertical />
           </button>
           <button
             title="Delete grabber"
-            className="trim-control margined"
+            className="play-control margined flex justify-center items-center"
             onClick={preDeleteGrabber}
           >
-            Delete <FaGripLinesVertical />
+            DELETE <FaGripLinesVertical />
           </button>
           <button
             title="Save changes"
-            className="trim-control"
+            className="play-control margined"
             // onClick={saveVideo}
           >
-            Save
+            TRIM
           </button>
         </div>
       </div>
-      {ready ? <div></div> : <div>Loading...</div>}
       {currentWarning != null ? (
         <div className={"warning"}>{warnings[currentWarning]}</div>
       ) : (

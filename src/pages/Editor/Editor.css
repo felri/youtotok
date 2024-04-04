@@ -68,8 +68,7 @@ body{
 
 /* Styling for Editing */
 .wrapper {
-    width: 60%;
-    max-width: 90%;
+    width: 100%;
     padding: 1rem;
     border-radius: 4px;
     margin: auto;
@@ -88,19 +87,21 @@ body{
   
   .video {
     width: 100%;
+    max-width: 60%;
     cursor: pointer;
     border-radius: 1em;
+    margin: auto;
   }
   
   .playback {
     position: relative;
-    margin-top: 1rem;
+    margin-top: 2rem;
     margin-left: 24px;
     margin-right: 24px;
-    height: 10px;
+    height: 70px;
     background: #2f3b44;
     margin-bottom: 1rem;
-    border-radius: 1em;
+    width: calc(100% - 48px);
   }
   .playback .seekable {
     position: absolute;
@@ -115,9 +116,8 @@ body{
     position: absolute;
     top: -4px;
     bottom: -4px;
-    width: 18px;
+    width: 12px;
     border-radius: 2px;
-    z-index: 1;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
     cursor: pointer;
     transition: transform 0.2s ease;
@@ -126,10 +126,10 @@ body{
     justify-content: center;
   }
   .playback .grabber.start {
-    background: #a8d736;
+    background: #a7d73694;
   }
   .playback .grabber.end {
-    background: #fc4242;
+    background: #fc424280;
   }
   .playback .grabber:hover {
     transform: scaleY(1.4);
