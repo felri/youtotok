@@ -140,7 +140,7 @@ body{
     -webkit-user-drag: none; */
   }
   .playback .progress {
-    background: #0072cf;
+    background: #005296;
     position: absolute;
     left: 0;
     top: 0;
@@ -156,7 +156,6 @@ body{
   }
   .controls .player-controls button {
     width: 34px;
-    margin: 0 0.125rem;
   }
   .controls .player-controls .play-control {
     background: #2f3b44;
@@ -240,7 +239,7 @@ body{
     letter-spacing: 0.1em;
   }
   .controls .trim-control:hover {
-    background: #038eff;
+    background: #004277;
   }
 
   .margined{

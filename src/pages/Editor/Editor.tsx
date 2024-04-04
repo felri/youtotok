@@ -23,7 +23,7 @@ const Timestamp = (props: { time: number; className?: string }) => {
   const minutes = Math.floor((time - hours * 3600) / 60);
   const seconds = Math.floor(time - hours * 3600 - minutes * 60);
   return (
-    <span className={props.className + " text-white absolute -top-7"}>
+    <span className={props.className + " text-white absolute"}>
       {hours}:{minutes < 10 ? "0" : ""}
       {minutes}:{seconds < 10 ? "0" : ""}
       {seconds}
@@ -60,6 +60,10 @@ function Editor({ videoUrl }: EditorProps) {
   const [currentTime, setCurrentTime] = useState(0);
 
   const [dragging, setDragging] = useState(false);
+
+  const [cursorX, setCursorX] = useState(0);
+  const [cursorTime, setCursorTime] = useState(0);
+  const [showCursor, setShowCursor] = useState(false);
 
   //Boolean state to handle video mute
   const [isMuted, setIsMuted] = useState(false);
@@ -117,6 +121,9 @@ function Editor({ videoUrl }: EditorProps) {
       if (event.key === " ") {
         playPause();
       }
+      if (event.key === "m") {
+        setIsMuted(!isMuted);
+      }
     };
 
     window.addEventListener("keyup", handleKeyUp);
@@ -124,11 +131,25 @@ function Editor({ videoUrl }: EditorProps) {
     return () => {
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [playing]);
+  }, [playing, isMuted]);
 
   useEffect(() => {
     addActiveSegments();
   }, [timings]);
+
+  const updateCursor = (e: any) => {
+    setShowCursor(true);
+    const rect = playBackBarRef?.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+    setCursorX(e.clientX - rect.left);
+    // set the cursor time
+    setCursorTime(
+      ((e.clientX - rect.left) / rect.width) *
+        (playVideoRef?.current?.duration || 0)
+    );
+  };
 
   const handleMouseMoveWhenGrabbed = (event: MouseEvent) => {
     if (
@@ -140,7 +161,7 @@ function Editor({ videoUrl }: EditorProps) {
     }
 
     setDragging(true);
-    playPause();
+    pauseVideo();
 
     const playbackRect = playBackBarRef.current.getBoundingClientRect();
     const seekRatio = calculateSeekRatio(event.clientX, playbackRect);
@@ -157,11 +178,21 @@ function Editor({ videoUrl }: EditorProps) {
     }
 
     setTimings(timings);
-    setCurrentTime(seekTime);
-    progressBarRef.current.style.width = "0%";
-
-    // playVideoRef.current.currentTime = seekTime;
   };
+
+  const pauseVideo = () => {
+    if (playVideoRef.current) {
+      playVideoRef.current.pause();
+      setPlaying(false);
+    }
+  };
+
+  const playVideo = () => {
+    if (playVideoRef.current) {
+      playVideoRef.current.play();
+      setPlaying(true);
+    }
+  }
 
   const calculateSeekRatio = (clientX: number, playbackRect: DOMRect) => {
     return (clientX - playbackRect.left) / playbackRect.width;
@@ -185,7 +216,7 @@ function Editor({ videoUrl }: EditorProps) {
         (index !== 0 ? timings[index - 1].end + difference + 0.2 : 0) &&
       seekTime < timings[index].end - difference
     ) {
-      progressBarRef.current.style.left = `${seekRatio * 100}%`;
+      // progressBarRef.current.style.left = `${seekRatio * 100}%`;
       playVideoRef.current.currentTime = seekTime;
       timings[index]["start"] = seekTime;
     }
@@ -195,17 +226,13 @@ function Editor({ videoUrl }: EditorProps) {
     if (!progressBarRef.current || !playVideoRef.current) {
       return;
     }
-
-    console.log("Seek Time: ", seekTime);
-
     if (
       seekTime > timings[index].start + difference &&
       seekTime < playVideoRef.current.duration
     ) {
-      progressBarRef.current.style.left = `${
-        (timings[index].start / playVideoRef.current.duration) * 100
-      }%`;
-      playVideoRef.current.currentTime = timings[index].start;
+      // progressBarRef.current.style.left = `${
+      //   (timings[index].start / playVideoRef.current.duration) * 100
+      // }%`;
       timings[index]["end"] = seekTime;
     }
   };
@@ -216,6 +243,7 @@ function Editor({ videoUrl }: EditorProps) {
     window.removeEventListener("mouseup", removeMouseMoveEventListener);
     setDragging(false);
     addActiveSegments();
+    playVideo();
   };
 
   //Function handling reset logic
@@ -286,15 +314,26 @@ function Editor({ videoUrl }: EditorProps) {
 
   //Function handling skip to previous logic
   const skipPrevious = () => {
-    if (playing && playVideoRef.current) {
-      playVideoRef.current.pause();
+    if (!playVideoRef.current || !progressBarRef.current) {
+      return;
     }
-    // let previousIndex = (currentlyGrabbed.index !== 0) ? (currentlyGrabbed.index - 1) : (timings.length - 1)
-    // setCurrentlyGrabbed({currentlyGrabbed: {'index': previousIndex, 'type': 'start'}, playing: false})
-    // currentlyGrabbedRef.current = {'index': previousIndex, 'type': 'start'}
-    // progressBarRef.current.style.left = `${timings[previousIndex].start / playVideoRef.current.duration * 100}%`
-    // progressBarRef.current.style.width = '0%'
-    // playVideoRef.current.currentTime = timings[previousIndex].start
+
+    let prevIndex =
+      currentlyGrabbedRef.current.index !== 0
+        ? currentlyGrabbedRef.current.index - 1
+        : 0;
+
+    currentlyGrabbedRef.current = { index: prevIndex, type: "start" };
+
+    progressBarRef.current.style.left = `${
+      (timings[prevIndex].start / playVideoRef.current.duration) * 100
+    }%`;
+
+    progressBarRef.current.style.width = "0%";
+
+    playVideoRef.current.currentTime = timings[prevIndex].start;
+
+    addActiveSegments();
   };
 
   //Function handling play and pause logic
@@ -323,15 +362,26 @@ function Editor({ videoUrl }: EditorProps) {
 
   //Function handling skip to next logic
   const skipNext = () => {
-    if (playing && playVideoRef.current) {
-      playVideoRef.current.pause();
+    if (!playVideoRef.current || !progressBarRef.current) {
+      return;
     }
-    // let nextIndex = (currentlyGrabbed.index !== (timings.length - 1)) ? (currentlyGrabbed.index + 1) : 0
-    // setCurrentlyGrabbed({currentlyGrabbed: {'index': nextIndex, 'type': 'start'}, playing: false})
-    // currentlyGrabbedRef.current = {'index': nextIndex, 'type': 'start'}
-    // progressBarRef.current.style.left = `${timings[nextIndex].start / playVideoRef.current.duration * 100}%`
-    // progressBarRef.current.style.width = '0%'
-    // playVideoRef.current.currentTime = timings[nextIndex].start
+
+    let nextIndex =
+      currentlyGrabbedRef.current.index !== timings.length - 1
+        ? currentlyGrabbedRef.current.index + 1
+        : 0;
+
+    currentlyGrabbedRef.current = { index: nextIndex, type: "start" };
+
+    progressBarRef.current.style.left = `${
+      (timings[nextIndex].start / playVideoRef.current.duration) * 100
+    }%`;
+
+    progressBarRef.current.style.width = "0%";
+
+    playVideoRef.current.currentTime = timings[nextIndex].start;
+
+    addActiveSegments();
   };
 
   //Function handling updating progress logic (clicking on progress bar to jump to different time durations)
@@ -430,8 +480,8 @@ function Editor({ videoUrl }: EditorProps) {
     }
 
     const videoLength = playVideoRef.current.duration;
-    const inactiveColor = "#aaaa"; // Semi-transparent gray color
-    const activeColor = "#fff"; // White color
+    const inactiveColor = "#1a1a1a"; // Semi-transparent gray color
+    const activeColor = "#ccc"; // White color
 
     let colorStops = [];
     let overlays = [];
@@ -519,7 +569,7 @@ function Editor({ videoUrl }: EditorProps) {
       div.style.width = `${overlay.end - overlay.start}%`;
       div.style.height = "100%";
       div.style.zIndex = "10";
-      div.style.backgroundColor = "#aaaa";
+      div.style.backgroundColor = inactiveColor;
       playBackBarRef?.current?.appendChild(div);
     });
   };
@@ -608,8 +658,79 @@ function Editor({ videoUrl }: EditorProps) {
       >
         <source src={videoUrl} type="video/mp4" />
       </video>
-      <div className="playback">
-        <Timestamp time={0} />
+      <div className="controls flex justify-center items-center mt-4">
+        <div className="flex space-x-1">
+          <button
+            className="settings-control"
+            title="Reset Video"
+            onClick={reset}
+          >
+            <FaSync />
+          </button>
+          <button
+            className="settings-control"
+            title="Mute/Unmute Video"
+            onClick={() => setIsMuted(!isMuted)}
+          >
+            {isMuted ? <FaVolumeMute /> : <FaVolumeUp />}
+          </button>
+          <button
+            className="settings-control"
+            title="Capture Thumbnail"
+            onClick={captureSnapshot}
+          >
+            <FaCamera />
+          </button>
+        </div>
+        <div className="player-controls flex space-x-1 mx-2">
+          <button
+            className="seek-start"
+            title="Skip to previous clip"
+            onClick={skipPrevious}
+          >
+            <FaStepBackward />
+          </button>
+          <button
+            className="play-control"
+            title="Play/Pause"
+            onClick={playPause}
+          >
+            {playing ? <FaPause /> : <FaPlay />}
+          </button>
+          <button
+            className="seek-end"
+            title="Skip to next clip"
+            onClick={skipNext}
+          >
+            <FaStepForward />
+          </button>
+        </div>
+        <div className="flex justify-center items-center space-x-1">
+          <button
+            title="Add grabber"
+            className="flex justify-center items-center"
+            onClick={addGrabber}
+          >
+            ADD <FaGripLinesVertical />
+          </button>
+          <button
+            title="Delete grabber"
+            className="flex justify-center items-center"
+            onClick={preDeleteGrabber}
+          >
+            DELETE <FaGripLinesVertical />
+          </button>
+          <button
+            title="Save changes"
+            className="bg-green-800 text-white px-4 py-2 rounded-md"
+            // onClick={saveVideo}
+          >
+            TRIM
+          </button>
+        </div>
+      </div>
+      <div className="playback mb-10">
+        <Timestamp time={0} className=" -bottom-8" />
         {/* If there is an instance of the playVideoRef, render the trimmer markers */}
         {timings.map((timing, index) => (
           <div key={"segment_" + index} className="segment">
@@ -680,89 +801,33 @@ function Editor({ videoUrl }: EditorProps) {
           className="seekable relative"
           ref={playBackBarRef}
           onClick={updateProgress}
-        ></div>
+          onMouseMove={updateCursor}
+          onMouseLeave={() => setShowCursor(false)}
+        >
+          {showCursor && (
+            <div
+              className="absolute top-0 bottom-0 bg-red-800 z-50"
+              style={{
+                left: `${cursorX}px`,
+                width: "1px",
+              }}
+            >
+              <Timestamp time={cursorTime} className="-right-5 -top-7" />
+            </div>
+          )}
+        </div>
         <div className="progress relative" ref={progressBarRef}>
           <div className="absolute top-0 left-0 w-full h-full">
-            <Timestamp time={currentTime} className="-right-5" />
+            <Timestamp time={currentTime} className="-right-5 -top-7" />
           </div>
         </div>
         <Timestamp
           time={playVideoRef?.current?.duration || 0}
-          className="-right-5"
+          className="-right-5 -bottom-8"
         />
       </div>
       {/* <AudioVisualizer src={videoUrl} isVideo={true} /> */}
-      <div className="controls">
-        <div className="player-controls">
-          <button
-            className="settings-control"
-            title="Reset Video"
-            onClick={reset}
-          >
-            <FaSync />
-          </button>
-          <button
-            className="settings-control"
-            title="Mute/Unmute Video"
-            onClick={() => setIsMuted(!isMuted)}
-          >
-            {isMuted ? <FaVolumeMute /> : <FaVolumeUp />}
-          </button>
-          <button
-            className="settings-control"
-            title="Capture Thumbnail"
-            onClick={captureSnapshot}
-          >
-            <FaCamera />
-          </button>
-        </div>
-        <div className="player-controls">
-          <button
-            className="seek-start"
-            title="Skip to previous clip"
-            onClick={skipPrevious}
-          >
-            <FaStepBackward />
-          </button>
-          <button
-            className="play-control"
-            title="Play/Pause"
-            onClick={playPause}
-          >
-            {playing ? <FaPause /> : <FaPlay />}
-          </button>
-          <button
-            className="seek-end"
-            title="Skip to next clip"
-            onClick={skipNext}
-          >
-            <FaStepForward />
-          </button>
-        </div>
-        <div className="flex justify-center items-center space-x-2">
-          <button
-            title="Add grabber"
-            className="play-control margined flex justify-center items-center"
-            onClick={addGrabber}
-          >
-            ADD <FaGripLinesVertical />
-          </button>
-          <button
-            title="Delete grabber"
-            className="play-control margined flex justify-center items-center"
-            onClick={preDeleteGrabber}
-          >
-            DELETE <FaGripLinesVertical />
-          </button>
-          <button
-            title="Save changes"
-            className="play-control margined"
-            // onClick={saveVideo}
-          >
-            TRIM
-          </button>
-        </div>
-      </div>
+
       {currentWarning != null ? (
         <div className={"warning"}>{warnings[currentWarning]}</div>
       ) : (
