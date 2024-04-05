@@ -24,6 +24,7 @@ const Timestamp = (props: { time: number; className?: string }) => {
   const seconds = Math.floor(time - hours * 3600 - minutes * 60);
   return (
     <span className={props.className + " text-white absolute"}>
+      {hours < 10 ? "0" : ""}
       {hours}:{minutes < 10 ? "0" : ""}
       {minutes}:{seconds < 10 ? "0" : ""}
       {seconds}
@@ -49,7 +50,7 @@ const Grabber = () => (
   </svg>
 );
 
-function Editor({ videoUrl }: EditorProps) {
+function Editor({ videoUrl, trimVideo }: EditorProps) {
   const [timings, setTimings] = useState<Timings[]>([
     {
       start: 0,
@@ -66,7 +67,7 @@ function Editor({ videoUrl }: EditorProps) {
   const [showCursor, setShowCursor] = useState(false);
 
   //Boolean state to handle video mute
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
 
   //Boolean state to handle whether video is playing or not
   const [playing, setPlaying] = useState(false);
@@ -159,9 +160,8 @@ function Editor({ videoUrl }: EditorProps) {
     ) {
       return;
     }
-
-    setDragging(true);
     pauseVideo();
+    setDragging(true);
 
     const playbackRect = playBackBarRef.current.getBoundingClientRect();
     const seekRatio = calculateSeekRatio(event.clientX, playbackRect);
@@ -172,7 +172,7 @@ function Editor({ videoUrl }: EditorProps) {
     );
 
     if (type === "start") {
-      handleStartType(seekTime, seekRatio, index);
+      handleStartType(seekTime, index);
     } else if (type === "end") {
       handleEndType(seekTime, index);
     }
@@ -192,7 +192,7 @@ function Editor({ videoUrl }: EditorProps) {
       playVideoRef.current.play();
       setPlaying(true);
     }
-  }
+  };
 
   const calculateSeekRatio = (clientX: number, playbackRect: DOMRect) => {
     return (clientX - playbackRect.left) / playbackRect.width;
@@ -202,21 +202,15 @@ function Editor({ videoUrl }: EditorProps) {
     return duration * seekRatio;
   };
 
-  const handleStartType = (
-    seekTime: number,
-    seekRatio: number,
-    index: number
-  ) => {
+  const handleStartType = (seekTime: number, index: number) => {
     if (!progressBarRef.current || !playVideoRef.current) {
       return;
     }
 
     if (
-      seekTime >
-        (index !== 0 ? timings[index - 1].end + difference + 0.2 : 0) &&
+      seekTime > (index !== 0 ? timings[index - 1].end + difference : 0) &&
       seekTime < timings[index].end - difference
     ) {
-      // progressBarRef.current.style.left = `${seekRatio * 100}%`;
       playVideoRef.current.currentTime = seekTime;
       timings[index]["start"] = seekTime;
     }
@@ -230,9 +224,6 @@ function Editor({ videoUrl }: EditorProps) {
       seekTime > timings[index].start + difference &&
       seekTime < playVideoRef.current.duration
     ) {
-      // progressBarRef.current.style.left = `${
-      //   (timings[index].start / playVideoRef.current.duration) * 100
-      // }%`;
       timings[index]["end"] = seekTime;
     }
   };
@@ -481,9 +472,7 @@ function Editor({ videoUrl }: EditorProps) {
 
     const videoLength = playVideoRef.current.duration;
     const inactiveColor = "#1a1a1a"; // Semi-transparent gray color
-    const activeColor = "#ccc"; // White color
 
-    let colorStops = [];
     let overlays = [];
 
     // remove all overlay divs
@@ -491,9 +480,6 @@ function Editor({ videoUrl }: EditorProps) {
     overlayDivs.forEach((div) => {
       div.remove();
     });
-
-    // Add initial inactive segment
-    colorStops.push(`${inactiveColor} 0%`);
 
     for (let i = 0; i < timings.length; i++) {
       const currentSegment = timings[i];
@@ -503,9 +489,6 @@ function Editor({ videoUrl }: EditorProps) {
       const inactiveStart =
         i === 0 ? 0 : (timings[i - 1].end / videoLength) * 100;
       const inactiveEnd = (currentSegment.start / videoLength) * 100;
-      colorStops.push(
-        `${inactiveColor} ${inactiveStart}%, ${inactiveColor} ${inactiveEnd}%`
-      );
 
       // Add overlay div for inactive segment
       overlays.push({
@@ -514,19 +497,12 @@ function Editor({ videoUrl }: EditorProps) {
       });
 
       // Add active segment
-      const activeStart = inactiveEnd;
       const activeEnd = (currentSegment.end / videoLength) * 100;
-      colorStops.push(
-        `${activeColor} ${activeStart}%, ${activeColor} ${activeEnd}%`
-      );
 
       // Add inactive segment after the current active segment (if there is a next segment)
       if (nextSegment) {
         const nextInactiveStart = activeEnd;
         const nextInactiveEnd = (nextSegment.start / videoLength) * 100;
-        colorStops.push(
-          `${inactiveColor} ${nextInactiveStart}%, ${inactiveColor} ${nextInactiveEnd}%`
-        );
 
         // Check if overlay already exists
         const overlayExists = overlays.some(
@@ -547,9 +523,6 @@ function Editor({ videoUrl }: EditorProps) {
     // Add final inactive segment
     const finalInactiveStart =
       (timings[timings.length - 1].end / videoLength) * 100 + 1;
-    colorStops.push(
-      `${inactiveColor} ${finalInactiveStart}%, ${inactiveColor} 100%`
-    );
 
     // Add overlay div for final inactive segment
     overlays.push({
@@ -557,8 +530,7 @@ function Editor({ videoUrl }: EditorProps) {
       end: 100,
     });
 
-    const gradientColors = colorStops.join(", ");
-    playBackBarRef.current.style.background = `linear-gradient(to right, ${gradientColors})`;
+    playBackBarRef.current.style.background = `#eee`;
 
     // Create overlay divs
     overlays.forEach((overlay) => {
@@ -575,19 +547,12 @@ function Editor({ videoUrl }: EditorProps) {
   };
 
   // Function handling logic for post trimmed video
-  const saveVideo = async (fileInput: File) => {
-    let metadata = {
-      trim_times: timings,
-      mute: isMuted,
-    };
-    console.log(metadata.trim_times);
-    const trimStart = metadata.trim_times[0].start;
-    const trimEnd = metadata.trim_times[0].end;
+  const handleTrim = async () => {
+    if (!playVideoRef.current) {
+      return;
+    }
 
-    const trimmedVideo = trimEnd - trimStart;
-
-    console.log("Trimmed Duration: ", trimmedVideo);
-    console.log("Trim End: ", trimEnd);
+    trimVideo(timings);
   };
 
   //Function handling the progress bar logic
@@ -723,7 +688,7 @@ function Editor({ videoUrl }: EditorProps) {
           <button
             title="Save changes"
             className="bg-green-800 text-white px-4 py-2 rounded-md"
-            // onClick={saveVideo}
+            onClick={handleTrim}
           >
             TRIM
           </button>
@@ -736,7 +701,7 @@ function Editor({ videoUrl }: EditorProps) {
           <div key={"segment_" + index} className="segment">
             <div
               id="grabberStart"
-              className="grabber start z-30"
+              className="grabber start z-30 mr-1"
               onMouseDown={() => {
                 // set time to start based on the position of the mouse X
                 if (deletingGrabber.deletingGrabber) {

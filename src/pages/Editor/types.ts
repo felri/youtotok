@@ -5,6 +5,7 @@ export type Timings = {
 
 export interface EditorProps {
   videoUrl: string;
+  trimVideo: (timings: Timings[]) => Promise<void>;
 }
 
 export type GrabberProps = {
