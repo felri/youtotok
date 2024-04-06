@@ -11,24 +11,18 @@ struct Timing {
 }
 
 fn convert_to_vtt(json_data: &Value, subtitle_type: &str) -> String {
-    println!("Converting to VTT...");
     let mut vtt_content = String::new();
     vtt_content.push_str("WEBVTT\n\n");
 
     let words = json_data.get(subtitle_type).and_then(Value::as_array);
-
-    println!("words: {:?}", words);
 
     if let Some(words) = words {
         let mut start_time = 0.0;
         let mut end_time = 0.0;
         let mut subtitle = String::new();
 
-        println!("Subtitle Type: {}", subtitle_type);
-        println!("Words: {:?}", words);
         for word in words {
             if let Some(word_map) = word.as_object() {
-                println!("Word Map: {:?}", word_map);
                 let word_text = word_map
                     .get("word")
                     .or_else(|| word_map.get("text"))
@@ -37,7 +31,6 @@ fn convert_to_vtt(json_data: &Value, subtitle_type: &str) -> String {
                 start_time = word_map.get("start").and_then(Value::as_f64).unwrap_or(0.0);
                 end_time = word_map.get("end").and_then(Value::as_f64).unwrap_or(0.0);
 
-                // Skip if word_text is empty or contains only spaces
                 if word_text.trim().is_empty() {
                     continue;
                 }
@@ -104,7 +97,7 @@ async fn extract_audio(video_id: String, audio_format: String) -> Result<String,
 }
 
 #[tauri::command]
-async fn transcribe_audio(video_id: &str, api_key: &str) -> Result<String, String> {
+async fn transcribe_audio(video_id: &str, api_key: &str) -> Result<(), String> {
     println!("Transcribing audio...");
     println!("Video ID: {}", video_id);
     println!("API Key: {}", api_key);
@@ -146,7 +139,7 @@ async fn transcribe_audio(video_id: &str, api_key: &str) -> Result<String, Strin
     std::fs::write(format!("../public/{}.vtt", video_id), vtt_segments).unwrap();
     std::fs::write(format!("../public/{}_words.vtt", video_id), vtt_words).unwrap();
 
-    Ok(res)
+    Ok(())
 }
 
 #[tauri::command]
@@ -208,6 +201,15 @@ async fn trim_video(video_id: String, timings: Vec<Timing>) -> Result<String, St
 }
 
 #[tauri::command]
+async fn check_subtitles(video_id: String) -> Result<bool, String> {
+    let path = std::path::Path::new("../public")
+        .join(&video_id)
+        .with_extension("vtt");
+
+    Ok(path.exists())
+}
+
+#[tauri::command]
 async fn download_youtube_video(url: String) -> Result<String, String> {
     let video_options = VideoOptions {
         quality: VideoQuality::Highest,
@@ -240,7 +242,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             download_youtube_video,
             trim_video,
-            transcribe_audio
+            transcribe_audio,
+            check_subtitles
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

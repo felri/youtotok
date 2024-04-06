@@ -50,7 +50,7 @@ const Grabber = () => (
   </svg>
 );
 
-function Editor({ videoUrl, trimVideo }: EditorProps) {
+function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
   const [timings, setTimings] = useState<Timings[]>([
     {
       start: 0,
@@ -689,8 +689,9 @@ function Editor({ videoUrl, trimVideo }: EditorProps) {
             title="Save changes"
             className="bg-green-800 text-white px-4 py-2 rounded-md"
             onClick={handleTrim}
+            disabled={loading}
           >
-            TRIM
+            {loading ? "LOADING..." : "TRIM"}
           </button>
         </div>
       </div>

@@ -6,6 +6,7 @@ export type Timings = {
 export interface EditorProps {
   videoUrl: string;
   trimVideo: (timings: Timings[]) => Promise<void>;
+  loading: boolean;
 }
 
 export type GrabberProps = {
@@ -13,3 +14,10 @@ export type GrabberProps = {
   currentWarning: string | null;
   currentlyGrabbed?: { index: number; type: string };
 };
+export interface SubtitlesTrackProps {
+  kind: string;
+  src: string;
+  srcLang: string;
+  default?: boolean;
+  label: string;
+}
