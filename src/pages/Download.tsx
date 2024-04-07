@@ -6,7 +6,7 @@ import { useLocation } from "wouter";
 function DownloadPage() {
   const { setVideoId } = useStore();
   const [_, setLocation] = useLocation();
-  const [url, setUrl] = useState("https://www.youtube.com/watch?v=geJbZFxKwiM");
+  const [url, setUrl] = useState("https://www.youtube.com/watch?v=wLJLLKMdxnQ");
   const [loading, setLoading] = useState(false);
 
   async function download() {

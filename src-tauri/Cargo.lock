@@ -3423,6 +3423,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rsubs-lib"
+version = "0.1.10"
+dependencies = [
+ "regex",
+ "serde",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5607,6 +5615,7 @@ name = "ytb-editor"
 version = "0.0.0"
 dependencies = [
  "reqwest 0.12.2",
+ "rsubs-lib",
  "rusty_ytdl",
  "serde",
  "serde_json",

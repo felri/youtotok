@@ -87,7 +87,7 @@ body{
   
   .video {
     width: 100%;
-    max-width: 70%;
+    max-width: 100%;
     cursor: pointer;
     margin: auto;
   }
@@ -155,7 +155,7 @@ body{
     text-align: center;
   }
   .controls .player-controls button {
-    width: 34px;
+    /* width: 34px; */
   }
   .controls .player-controls .play-control {
     background: #2f3b44;

@@ -112,3 +112,20 @@ button {
     background-color: #445562;
   }
 }
+
+textarea {
+  color: #0f0f0f;
+  font-weight: bold;
+  background-color: rgb(205, 206, 208);
+}
+
+select {
+  color: #0f0f0f;
+  font-weight: bold;
+  background-color: rgb(205, 206, 208);
+}
+
+input {
+  background-color: rgb(205, 206, 208);
+  color: #0f0f0f;
+}

@@ -1,13 +1,23 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use reqwest::multipart;
-use rusty_ytdl::{Video, VideoOptions, VideoQuality, VideoSearchOptions};
-use serde_json::{Map, Value};
-use std::process::Command;
+use rsubs_lib::vtt;
+use rusty_ytdl::{Video, VideoFormat, VideoOptions, VideoQuality, VideoSearchOptions};
+use serde_json::Value;
+use std::io::BufRead;
+use std::{fs, io::BufReader, path::Path, process::Command}; // Import the BufRead trait
 #[derive(Debug, serde::Deserialize)]
 struct Timing {
     start: f32,
     end: f32,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct Dimensions {
+    width: f32,
+    height: f32,
+    x: f32,
+    y: f32,
 }
 
 fn convert_to_vtt(json_data: &Value, subtitle_type: &str) -> String {
@@ -69,9 +79,6 @@ async fn extract_audio(video_id: String, audio_format: String) -> Result<String,
     let input = format!("../public/{}_trimmed.mp4", video_id);
     let output = format!("../public/{}.{}", video_id, audio_format);
 
-    println!("Input: {}", input);
-    println!("Output: {}", output);
-
     let output = Command::new("ffmpeg")
         .args(&[
             "-y",
@@ -90,8 +97,6 @@ async fn extract_audio(video_id: String, audio_format: String) -> Result<String,
         .expect("failed to execute process");
 
     let output = String::from_utf8_lossy(&output.stdout);
-
-    println!("FFmpeg Output: {}", output);
 
     Ok(output.to_string())
 }
@@ -142,16 +147,51 @@ async fn transcribe_audio(video_id: &str, api_key: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn get_video_dimensions(video_path: &str) -> Result<(i32, i32), String> {
+    let output = Command::new("ffprobe")
+        .args(&[
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=s=x:p=0",
+            video_path,
+        ])
+        .output()
+        .map_err(|e| format!("Failed to execute ffprobe: {}", e))?;
+
+    if output.status.success() {
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        let dimensions: Vec<&str> = output_str.trim().split('x').collect();
+        if dimensions.len() == 2 {
+            let width = dimensions[0].parse().unwrap_or(0);
+            let height = dimensions[1].parse().unwrap_or(0);
+            return Ok((width, height));
+        }
+    }
+
+    Err("Failed to get video dimensions".to_string())
+}
+
 #[tauri::command]
-async fn trim_video(video_id: String, timings: Vec<Timing>) -> Result<String, String> {
+async fn trim_video(
+    video_id: String,
+    timings: Vec<Timing>,
+    dimensions: Option<Dimensions>,
+) -> Result<String, String> {
     let input = format!("../public/{}.mp4", video_id);
     let output = format!("../public/{}_trimmed.mp4", video_id);
 
     let mut filters = Vec::new();
     let mut filter_complex = String::new();
 
+    let (video_width, video_height) = get_video_dimensions(&input).unwrap();
+
     for (i, timing) in timings.iter().enumerate() {
-        let filter = format!(
+        let mut filter = format!(
             "[0:v]trim=start={}:end={},setpts=PTS-STARTPTS[v{}];[0:a]atrim=start={}:end={},asetpts=PTS-STARTPTS[a{}];",
             timing.start,
             timing.end,
@@ -160,6 +200,18 @@ async fn trim_video(video_id: String, timings: Vec<Timing>) -> Result<String, St
             timing.end,
             i
         );
+
+        if let Some(dimensions) = &dimensions {
+            let width = (video_width as f32 * dimensions.width / 100.0) as i32;
+            let height = (video_height as f32 * dimensions.height / 100.0) as i32;
+            let x = (video_width as f32 * dimensions.x / 100.0) as i32;
+            let y = (video_height as f32 * dimensions.y / 100.0) as i32;
+
+            filter += &format!(
+                "[v{}]crop={}:{}:{}:{},setpts=PTS-STARTPTS[v{}];",
+                i, width, height, x, y, i
+            );
+        }
 
         filters.push(format!("[v{}][a{}]", i, i));
         filter_complex.push_str(&filter);
@@ -209,31 +261,260 @@ async fn check_subtitles(video_id: String) -> Result<bool, String> {
     Ok(path.exists())
 }
 
+async fn merge_audio(video_id: &str, audio_format: &str) -> Result<String, String> {
+    let video_input = format!("../public/{}_noaudio.mp4", video_id);
+    let audio_input = format!("../public/{}.{}", video_id, audio_format);
+    let output = format!("../public/{}.mp4", video_id);
+
+    let output = Command::new("ffmpeg")
+        .args(&[
+            "-y",
+            "-i",
+            &video_input,
+            "-i",
+            &audio_input,
+            "-c",
+            "copy",
+            "-map",
+            "0:v", // Map video stream from the MP4 file
+            "-map",
+            "1:a", // Map audio stream from the WebM file
+            &output,
+        ])
+        .output()
+        .expect("failed to execute process");
+
+    let output = String::from_utf8_lossy(&output.stdout);
+    Ok(output.to_string())
+}
+
 #[tauri::command]
 async fn download_youtube_video(url: String) -> Result<String, String> {
     let video_options = VideoOptions {
-        quality: VideoQuality::Highest,
-        filter: VideoSearchOptions::VideoAudio,
+        quality: VideoQuality::HighestVideo,
+        filter: VideoSearchOptions::Video,
         ..Default::default()
     };
 
-    let video = Video::new_with_options(url, video_options).unwrap();
+    let audio_options = VideoOptions {
+        quality: VideoQuality::HighestAudio,
+        filter: VideoSearchOptions::Audio,
+        ..Default::default()
+    };
+
+    let video = Video::new_with_options(url.clone(), video_options).unwrap();
+    let audio = Video::new_with_options(url, audio_options).unwrap();
+
+    let audio_extension = audio
+        .get_info()
+        .await
+        .unwrap()
+        .formats
+        .iter()
+        .filter(|f| f.mime_type.mime.to_string().contains("audio"))
+        .max_by_key(|f| f.bitrate)
+        .map(|f| f.mime_type.container.to_string())
+        .unwrap();
 
     let video_info = video.get_info().await.unwrap();
 
     let video_id = video_info.video_details.video_id;
 
-    let path = std::path::Path::new("../public")
-        .join(&video_id)
+    let video_path = std::path::Path::new("../public")
+        .join(format!("{}_noaudio", &video_id))
         .with_extension("mp4");
 
-    if path.exists() {
+    let audio_path = std::path::Path::new("../public")
+        .join(&video_id)
+        .with_extension(&audio_extension);
+
+    if video_path.exists() {
         return Ok(video_id);
     }
 
-    video.download(path).await.unwrap();
+    video.download(video_path).await.unwrap();
+    audio.download(audio_path).await.unwrap();
+
+    merge_audio(&video_id, &audio_extension).await.unwrap();
 
     Ok(video_id)
+}
+
+#[tauri::command]
+async fn update_vtt(
+    video_id: String,
+    vtt_content: String,
+    sub_type: String,
+) -> Result<String, String> {
+    let path = match sub_type.as_str() {
+        "segments" => std::path::Path::new("../public")
+            .join(&video_id)
+            .with_extension("vtt"),
+        "words" => std::path::Path::new("../public")
+            .join(format!("{}_{}", &video_id, sub_type))
+            .with_extension("vtt"),
+        _ => std::path::Path::new("../public")
+            .join(format!("{}_{}", &video_id, sub_type))
+            .with_extension("vtt"),
+    };
+
+    std::fs::write(path, vtt_content.clone()).unwrap();
+
+    Ok(vtt_content)
+}
+
+fn get_vtt_subtitle_path(video_id: &str, sub_type: &str) -> String {
+    match sub_type {
+        "segments" => format!("../public/{}.vtt", video_id),
+        "words" => format!("../public/{}_words.vtt", video_id),
+        _ => format!("../public/{}_{}.vtt", video_id, sub_type),
+    }
+}
+
+fn vtt_line_to_pixel(video_id: &str, path: &str, video_height: i32) -> Result<String, String> {
+    let vtt_content =
+        std::fs::read_to_string(path).map_err(|e| format!("Error reading file: {}", e))?;
+    let mut vtt_lines = vtt_content.lines().peekable();
+
+    let output_path = format!("../public/{}_pixel.vtt", video_id);
+
+    let mut output = String::new();
+
+    // Iterate through the cue lines
+    while let Some(line) = vtt_lines.next() {
+        if line.contains("-->") && line.contains("line:") {
+            let parts: Vec<&str> = line.split("line:").collect();
+            let percentage: f32 = parts[1]
+                .trim_start()
+                .trim_end_matches('%')
+                .parse()
+                .map_err(|e| format!("Error parsing percentage: {}", e))?;
+            let pixels = ((1.0 - percentage / 100.0) * video_height as f32) as i32;
+            let new_line = format!("{}line:{}%", parts[0], pixels);
+            output.push_str(&new_line);
+            output.push('\n');
+        } else {
+            output.push_str(&line);
+            output.push('\n');
+        }
+    }
+
+    std::fs::write(output_path.clone(), output)
+        .map_err(|e| format!("Error writing file: {}", e))?;
+
+    Ok(output_path)
+}
+
+fn vtt_to_ass(video_id: &str, sub_type: &str, video_height: i32) -> Result<(), String> {
+    let path = get_vtt_subtitle_path(&video_id, &sub_type);
+    let output_path = vtt_line_to_pixel(&video_id, &path, video_height)?;
+
+    let ass_content = vtt::parse(output_path)
+        .map_err(|err| format!("Failed to parse VTT file: {}", err))?
+        .to_ass();
+
+    let output_path = Path::new("../public/").join(format!("{}.ass", video_id));
+
+    // Save the initial ass_content
+    ass_content
+        .to_file(output_path.as_path().to_str().unwrap())
+        .map_err(|err| format!("Failed to write ASS file: {}", err))?;
+
+    // Open the saved file
+    let file =
+        fs::File::open(&output_path).map_err(|err| format!("Failed to open ASS file: {}", err))?;
+    let reader = BufReader::new(file);
+
+    // Find the line where PlayResY: RESOLUTION is present
+    let resolution_line_prefix = "PlayResY: ";
+    let mut modified_content = String::new();
+    let mut resolution_line_found = false;
+
+    for line in reader.lines() {
+        let line = line.map_err(|err| format!("Failed to read line: {}", err))?;
+
+        if line.starts_with(resolution_line_prefix) {
+            // Replace the resolution value with video_height
+            let new_line = format!("{}{}", resolution_line_prefix, video_height);
+            modified_content.push_str(&new_line);
+            modified_content.push('\n');
+            resolution_line_found = true;
+        } else {
+            modified_content.push_str(&line);
+            modified_content.push('\n');
+        }
+    }
+
+    // If the resolution line was not found, append it to the end
+    if !resolution_line_found {
+        let new_line = format!("{}{}", resolution_line_prefix, video_height);
+        modified_content.push_str(&new_line);
+        modified_content.push('\n');
+    }
+
+    // Write the modified content back to the file
+    fs::write(&output_path, modified_content)
+        .map_err(|err| format!("Failed to write modified ASS file: {}", err))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn burn_subtitles(
+    video_id: String,
+    sub_type: String,
+    video_height: i32,
+) -> Result<String, String> {
+    let path = get_vtt_subtitle_path(&video_id, &sub_type);
+    if !fs::metadata(&path).is_ok() {
+        return Err(format!("Subtitle file does not exist: {:?}", path));
+    }
+
+    // convert vtt to ass subtitle
+    match vtt_to_ass(&video_id, &sub_type, video_height) {
+        Ok(()) => Ok::<String, String>("Subtitle conversion successful".to_string()),
+        Err(err) => {
+            return Err(err);
+        }
+    }
+    .unwrap();
+
+    let output = format!("../public/{}_burned.mp4", video_id);
+
+    let output = Command::new("ffmpeg")
+        .args(&[
+            "-y",
+            "-i",
+            &format!("../public/{}_trimmed.mp4", video_id),
+            "-vf",
+            &format!("subtitles=../public/{}.ass", video_id),
+            &output,
+        ])
+        .output()
+        .expect("failed to execute process");
+
+    let output = String::from_utf8_lossy(&output.stdout);
+
+    Ok(output.to_string())
+}
+
+#[tauri::command]
+async fn load_vtt(video_id: String, sub_type: String) -> Result<String, String> {
+    let path = match sub_type.as_str() {
+        "segments" => std::path::Path::new("../public")
+            .join(&video_id)
+            .with_extension("vtt"),
+        "words" => std::path::Path::new("../public")
+            .join(format!("{}_{}", &video_id, sub_type))
+            .with_extension("vtt"),
+        _ => std::path::Path::new("../public")
+            .join(format!("{}_{}", &video_id, sub_type))
+            .with_extension("vtt"),
+    };
+
+    let vtt_content = std::fs::read_to_string(path).unwrap();
+
+    Ok(vtt_content)
 }
 
 fn main() {
@@ -243,7 +524,10 @@ fn main() {
             download_youtube_video,
             trim_video,
             transcribe_audio,
-            check_subtitles
+            check_subtitles,
+            load_vtt,
+            update_vtt,
+            burn_subtitles
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

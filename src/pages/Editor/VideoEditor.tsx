@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
-import type { Timings } from "./types";
+import type { Timings, Dimensions } from "./types";
 
 import Editor from "./Editor";
 import "./Editor.css";
@@ -18,10 +18,9 @@ function VideoEditor() {
     }
   }, []);
 
-  async function trimVideo(timings: Timings[]) {
+  async function trimVideo(timings: Timings[], dimensions?: Dimensions) {
     setLoading(true);
-    const response = await invoke("trim_video", { videoId, timings });
-    console.log(response);
+    const response = await invoke("trim_video", { videoId, timings, dimensions });
     setLoading(false);
     setLocation("/subtitles");
   }

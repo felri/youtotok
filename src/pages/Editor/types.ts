@@ -1,3 +1,5 @@
+import { SyntheticEvent } from 'react';
+
 export type Timings = {
   start: number;
   end: number;
@@ -5,7 +7,7 @@ export type Timings = {
 
 export interface EditorProps {
   videoUrl: string;
-  trimVideo: (timings: Timings[]) => Promise<void>;
+  trimVideo: (timings: Timings[], dimensions?: Dimensions) => void;
   loading: boolean;
 }
 
@@ -21,3 +23,25 @@ export interface SubtitlesTrackProps {
   default?: boolean;
   label: string;
 }
+
+export interface Dimensions {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type DraggableData = {
+  node: HTMLElement;
+  x: number;
+  y: number;
+  deltaX: number;
+  deltaY: number;
+  lastX: number;
+  lastY: number;
+};
+
+export type DraggableEventHandler = (
+  e: any,
+  data: DraggableData
+) => void | false;

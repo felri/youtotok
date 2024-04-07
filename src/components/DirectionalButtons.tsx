@@ -1,17 +1,9 @@
-import React from "react";
-import {
-  FaArrowUp,
-  FaArrowDown,
-  FaArrowLeft,
-  FaArrowRight,
-} from "react-icons/fa";
+import { FaArrowUp, FaArrowDown } from "react-icons/fa";
 
 function DirectionalButtons({
   moveLine,
-  moveSide,
 }: {
   moveLine: (direction: "up" | "down") => void;
-  moveSide: (direction: "left" | "right") => void;
 }) {
   return (
     <div className="flex justify-center items-center">
@@ -24,7 +16,11 @@ function DirectionalButtons({
             <FaArrowUp />
           </button>
         </div>
-        <div className="col-start-1 row-start-2 flex justify-center items-center">
+        {/* add text in the middle */}
+        <div className="col-start-2 row-start-2 flex justify-center items-center">
+          <p className="text-white">Position</p>
+        </div>
+        {/* <div className="col-start-1 row-start-2 flex justify-center items-center">
           <button
             className="bg-green-900 text-white p-2 rounded-full hover:bg-green-700 transition-colors duration-300"
             onClick={() => moveSide("left")}
@@ -39,7 +35,7 @@ function DirectionalButtons({
           >
             <FaArrowRight />
           </button>
-        </div>
+        </div> */}
         <div className="col-start-2 row-start-3 flex justify-center items-center">
           <button
             className="bg-green-900 text-white p-2 rounded-full hover:bg-green-700 transition-colors duration-300"

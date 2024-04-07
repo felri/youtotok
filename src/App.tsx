@@ -1,7 +1,7 @@
 import { Route, Switch } from "wouter";
-import DownloadPage from "./pages/DownloadPage";
-import SubtitlesPage from "./pages/SubtitlesPage";
-import EditorPage from "./pages/Editor";
+import Download from "./pages/Download";
+import Subtitles from "./pages/Subtitles";
+import Editor from "./pages/Editor";
 import NavBar from "./components/NavBar";
 
 export default function App() {
@@ -14,9 +14,9 @@ export default function App() {
       the first matched route gets rendered
     */}
       <Switch>
-        <Route path="/" component={DownloadPage} />
-        <Route path="/trim" component={EditorPage} />
-        <Route path="/subtitles" component={SubtitlesPage} />
+        <Route path="/" component={Download} />
+        <Route path="/trim" component={Editor} />
+        <Route path="/subtitles" component={Subtitles} />
 
         {/* <Route path="/users/:name">
           {(params) => <>Hello, {params.name}!</>}

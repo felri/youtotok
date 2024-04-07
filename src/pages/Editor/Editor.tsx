@@ -1,15 +1,22 @@
 // /* eslint-disable func-names */
 import { useState, useRef, useEffect } from "react";
-import type { EditorProps, GrabberProps, Timings } from "./types";
+import type {
+  Dimensions,
+  DraggableEventHandler,
+  EditorProps,
+  GrabberProps,
+  Timings,
+} from "./types";
 import AudioVisualizer from "./AudioWave";
+import { IoMdPhonePortrait } from "react-icons/io";
+import { Rnd, RndResizeCallback } from "react-rnd";
 import "./Editor.css";
+import { IoMdTrash } from "react-icons/io";
 import {
   FaSync,
   FaStepBackward,
   FaStepForward,
-  FaCamera,
-  FaDownload,
-  FaEraser,
+  FaPlus,
   FaVolumeMute,
   FaVolumeUp,
   FaGripLinesVertical,
@@ -58,6 +65,16 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
     },
   ]);
 
+  const initialWidth = 200;
+  const initialHeight = 356;
+
+  const [dimensions, setDimensions] = useState<Dimensions>({
+    x: 0,
+    y: 0,
+    width: initialWidth,
+    height: initialHeight,
+  });
+
   const [currentTime, setCurrentTime] = useState(0);
 
   const [dragging, setDragging] = useState(false);
@@ -84,6 +101,8 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
   //State for error handling
   const [currentWarning, setCurrentWarning] = useState(null);
 
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+
   //State for imageUrl
   const [imageUrl, setImageUrl] = useState("");
 
@@ -101,6 +120,8 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
 
   //Ref handling the element of the current play time
   const playBackBarRef = useRef<HTMLDivElement>(null);
+
+  const parentVideoRef = useRef<HTMLDivElement>(null);
 
   //Variable for error handling on the delete grabber functionality
   const warnings = {
@@ -546,13 +567,33 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
     });
   };
 
+  const getPercentageDimensions = (
+    dimensions: Dimensions,
+    parentDiv: HTMLDivElement
+  ) => {
+    return {
+      width: (dimensions.width / parentDiv.offsetWidth) * 100,
+      height: (dimensions.height / parentDiv.offsetHeight) * 100,
+      x: (dimensions.x / parentDiv.offsetWidth) * 100,
+      y: (dimensions.y / parentDiv.offsetHeight) * 100,
+    };
+  };
+
   // Function handling logic for post trimmed video
   const handleTrim = async () => {
-    if (!playVideoRef.current) {
+    if (!playVideoRef.current || !parentVideoRef.current) {
       return;
     }
 
-    trimVideo(timings);
+    const percentageDimensions = getPercentageDimensions(
+      dimensions,
+      parentVideoRef.current
+    );
+    if (showPhoneModal) {
+      trimVideo(timings, percentageDimensions);
+    } else {
+      trimVideo(timings);
+    }
   };
 
   //Function handling the progress bar logic
@@ -609,20 +650,80 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
     }
   };
 
+  const handleResize: RndResizeCallback = (
+    e,
+    dir,
+    refToElement,
+    delta,
+    position
+  ) => {
+    const aspectRatio = initialWidth / initialHeight;
+    let newWidth = refToElement.offsetWidth;
+    let newHeight = newWidth / aspectRatio;
+
+    if (dir === "top" || dir === "bottom") {
+      newHeight = refToElement.offsetHeight;
+      newWidth = newHeight * aspectRatio;
+    }
+
+    // Get the parent div
+    const parentDiv = parentVideoRef.current;
+
+    // Check if the new height is higher than the parent div
+    if (parentDiv && newHeight > parentDiv.offsetHeight) {
+      newHeight = parentDiv.offsetHeight;
+      newWidth = newHeight * aspectRatio;
+    }
+
+    setDimensions({
+      x: position.x,
+      y: position.y,
+      width: newWidth,
+      height: newHeight,
+    });
+  };
+
+  const handleDrag: DraggableEventHandler = (e, data) => {
+    setDimensions({
+      x: data.x,
+      y: data.y,
+      width: dimensions.width,
+      height: dimensions.height,
+    });
+  };
+
   return (
     <div className="wrapper">
       {/* Main video element for the video editor */}
-      <video
-        className="video"
-        // autoload="metadata"
-        muted={isMuted}
-        ref={playVideoRef}
-        onLoadedData={playPause}
-        onClick={playPause}
-        onTimeUpdate={handleTimeUpdate}
+      <div
+        className="mx-auto block relative w-auto h-auto max-w-[70%]"
+        ref={parentVideoRef}
       >
-        <source src={videoUrl} type="video/mp4" />
-      </video>
+        <video
+          className="video"
+          // autoload="metadata"
+          muted={isMuted}
+          ref={playVideoRef}
+          onLoadedData={playPause}
+          onClick={playPause}
+          onTimeUpdate={handleTimeUpdate}
+        >
+          <source src={videoUrl} type="video/mp4" />
+        </video>
+        {showPhoneModal && (
+          <Rnd
+            size={{ width: dimensions.width, height: dimensions.height }}
+            position={{ x: dimensions.x, y: dimensions.y }}
+            onResize={handleResize}
+            onDragStop={handleDrag}
+            bounds="parent"
+            style={{
+              border: "3px solid red",
+            }}
+          />
+        )}
+      </div>
+
       <div className="controls flex justify-center items-center mt-4">
         <div className="flex space-x-1">
           <button
@@ -642,9 +743,9 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
           <button
             className="settings-control"
             title="Capture Thumbnail"
-            onClick={captureSnapshot}
+            onClick={() => setShowPhoneModal(!showPhoneModal)}
           >
-            <FaCamera />
+            <IoMdPhonePortrait />
           </button>
         </div>
         <div className="player-controls flex space-x-1 mx-2">
@@ -670,20 +771,20 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
             <FaStepForward />
           </button>
         </div>
-        <div className="flex justify-center items-center space-x-1">
+        <div className="player-controls flex justify-center items-center space-x-1">
           <button
             title="Add grabber"
-            className="flex justify-center items-center"
+            className="flex justify-center items-center play-control"
             onClick={addGrabber}
           >
-            ADD <FaGripLinesVertical />
+            <FaPlus /> <FaGripLinesVertical />
           </button>
           <button
             title="Delete grabber"
-            className="flex justify-center items-center"
+            className="flex justify-center items-center play-control"
             onClick={preDeleteGrabber}
           >
-            DELETE <FaGripLinesVertical />
+            <IoMdTrash /> <FaGripLinesVertical />
           </button>
           <button
             title="Save changes"
@@ -793,39 +894,6 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
         />
       </div>
       {/* <AudioVisualizer src={videoUrl} isVideo={true} /> */}
-
-      {currentWarning != null ? (
-        <div className={"warning"}>{warnings[currentWarning]}</div>
-      ) : (
-        ""
-      )}
-      {imageUrl !== "" ? (
-        <div className={"marginVertical"}>
-          <img src={imageUrl} className={"thumbnail"} alt="Photos" />
-          <div className="controls">
-            <div className="player-controls">
-              <button
-                className="settings-control"
-                title="Reset Video"
-                onClick={downloadSnapshot}
-              >
-                <FaDownload />
-              </button>
-              <button
-                className="settings-control"
-                title="Save Video"
-                onClick={() => {
-                  setImageUrl("");
-                }}
-              >
-                <FaEraser />
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        ""
-      )}
     </div>
   );
 }
