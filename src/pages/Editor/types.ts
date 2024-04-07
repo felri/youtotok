@@ -1,4 +1,4 @@
-import { SyntheticEvent } from 'react';
+import { SyntheticEvent } from "react";
 
 export type Timings = {
   start: number;
@@ -45,3 +45,42 @@ export type DraggableEventHandler = (
   e: any,
   data: DraggableData
 ) => void | false;
+
+export interface DownloadButtonProps {
+  subtitlesExist: boolean;
+  videoId: string;
+  subtitleType: "words" | "segments" | "none";
+  videoRef: React.RefObject<HTMLVideoElement>;
+}
+
+export interface SubtitleOptionsProps {
+  type: "words" | "segments" | "none";
+  setType: (type: "words" | "segments" | "none") => void;
+  subtitlesExist: boolean;
+}
+
+export interface GenerateSubtitlesButtonProps {
+  createSubtitles: () => void;
+  loading: boolean;
+  apiKey: string | null;
+  subtitlesExist: boolean;
+}
+
+export interface ApiKeyComponentProps {
+  apiKey: string | null;
+  setApiKey: (apiKey: string) => void;
+}
+
+export interface VttTextAreaProps {
+  type: "segments" | "words" | "none";
+  reloadVideo: () => void;
+}
+
+export interface CueVtt {
+  color: string;
+  fontWeight: string;
+  background: string;
+  fontFamily: string;
+  textShadow: string;
+  fontSize: string;
+}

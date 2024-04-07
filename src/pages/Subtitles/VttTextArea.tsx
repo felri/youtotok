@@ -4,20 +4,7 @@ import { useStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";
 import { TwitterPicker } from "react-color";
 import DirectionalButtons from "../../components/DirectionalButtons";
-
-interface VttTextAreaProps {
-  type: "segments" | "words" | "none";
-  reloadVideo: () => void;
-}
-
-interface CueVtt {
-  color: string;
-  fontWeight: string;
-  background: string;
-  fontFamily: string;
-  textShadow: string;
-  fontSize: string;
-}
+import { CueVtt, VttTextAreaProps } from "../Editor/types";
 
 function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
   const defaultCueVtt: CueVtt = {
