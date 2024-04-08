@@ -9,6 +9,7 @@ export interface EditorProps {
   videoUrl: string;
   trimVideo: (timings: Timings[], dimensions?: Dimensions) => void;
   loading: boolean;
+  videoId: string;
 }
 
 export type GrabberProps = {

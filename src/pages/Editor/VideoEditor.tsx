@@ -20,7 +20,11 @@ function VideoEditor() {
 
   async function trimVideo(timings: Timings[], dimensions?: Dimensions) {
     setLoading(true);
-    const response = await invoke("trim_video", { videoId, timings, dimensions });
+    const response = await invoke("trim_video", {
+      videoId,
+      timings,
+      dimensions,
+    });
     setLoading(false);
     setLocation("/subtitles");
   }
@@ -31,6 +35,7 @@ function VideoEditor() {
         videoUrl={`./${videoId}.mp4`}
         trimVideo={trimVideo}
         loading={loading}
+        videoId={videoId}
       />
     </div>
   );

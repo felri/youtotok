@@ -1,107 +1,351 @@
-import React, { useEffect, useRef } from "react";
-
-interface AudioVisualizerProps {
-  src: string;
-  isVideo?: boolean;
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { WaveSurfer, WaveForm, Region, Marker } from "wavesurfer-react";
+import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
+import TimelinePlugin from "wavesurfer.js/dist/plugins/timeline.js";
+/**
+ * @param min
+ * @param max
+ * @returns {*}
+ */
+function generateNum(min: number, max: number) {
+  return Math.random() * (max - min + 1) + min;
 }
 
-const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
-  src,
-  isVideo = false,
-}) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const audioCtx = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+/**
+ * @param distance
+ * @param min
+ * @param max
+ * @returns {([*, *]|[*, *])|*[]}
+ */
+function generateTwoNumsWithDistance(
+  distance: number,
+  min: number,
+  max: number
+) {
+  const num1 = generateNum(min, max);
+  const num2 = generateNum(min, max);
+  // if num2 - num1 < 10
+  if (num2 - num1 >= 10) {
+    return [num1, num2];
+  }
+  return generateTwoNumsWithDistance(distance, min, max);
+}
 
-  const windowWidth = window.innerWidth - 20;
+interface RegionsProps {
+  id: string;
+  start: number;
+  end: number;
+  color: string;
+  data?: any;
+}
+
+interface MarkerProps {
+  id?: string;
+  time: number;
+  label: string;
+  color: string;
+  draggable?: boolean;
+  position?: string;
+}
+
+interface AudioWaveProps {
+  videoId: string;
+}
+
+function AudioWave({ videoId }: AudioWaveProps) {
+  const [timelineVis, setTimelineVis] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const [markers, setMarkers] = useState<MarkerProps[]>([
+    // {
+    //   time: 5.5,
+    //   label: "V1",
+    //   color: "#ff990a",
+    //   draggable: true,
+    // },
+    // {
+    //   time: 10,
+    //   label: "V2",
+    //   color: "#00ffcc",
+    //   position: "top",
+    // },
+  ]);
+
+  const plugins = useMemo(() => {
+    return [
+      // {
+      //   key: "regions",
+      //   plugin: RegionsPlugin,
+      //   options: { dragSelection: true },
+      // },
+      timelineVis && {
+        key: "top-timeline",
+        plugin: TimelinePlugin,
+        options: {
+          height: 20,
+          insertPosition: "beforebegin",
+          style: {
+            color: "#2D5B88",
+          },
+        },
+      },
+      timelineVis && {
+        key: "bottom-timeline",
+        plugin: TimelinePlugin,
+        options: {
+          height: 10,
+          style: {
+            color: "#6A3274",
+          },
+        },
+      },
+    ].filter(Boolean);
+  }, [timelineVis]);
+
+  // const toggleTimeline = useCallback(() => {
+  //   setTimelineVis(!timelineVis);
+  // }, [timelineVis]);
+
+  const [regions, setRegions] = useState<RegionsProps[]>([
+    //   {
+    //     id: "region-1",
+    //     start: 0.5,
+    //     end: 10,
+    //     color: "rgba(0, 0, 0, .5)",
+    //     data: {
+    //       systemRegionId: 31,
+    //     },
+    //   },
+    //   {
+    //     id: "region-2",
+    //     start: 5,
+    //     end: 25,
+    //     color: "rgba(225, 195, 100, .5)",
+    //     data: {
+    //       systemRegionId: 32,
+    //     },
+    //   },
+    //   {
+    //     id: "region-3",
+    //     start: 15,
+    //     end: 35,
+    //     color: "rgba(25, 95, 195, .5)",
+    //     data: {
+    //       systemRegionId: 33,
+    //     },
+    // },
+  ]);
+
+  // use regions ref to pass it inside useCallback
+  // so it will use always the most fresh version of regions list
+  const regionsRef = useRef<RegionsProps[]>(regions);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    regionsRef.current = regions;
+  }, [regions]);
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  const regionCreatedHandler = useCallback(
+    (region: any) => {
+      console.log("region-created --> region:", region);
 
-    const audioContext = new AudioContext();
-    audioCtx.current = audioContext;
+      if (region.data.systemRegionId) return;
 
-    const analyser = audioContext.createAnalyser();
-    analyserRef.current = analyser;
+      setRegions([
+        ...regionsRef.current,
+        { ...region, data: { ...region.data, systemRegionId: -1 } },
+      ]);
+    },
+    [regionsRef]
+  );
 
-    if (isVideo) {
-      // Load the video and extract the audio track
-      const video = document.createElement("video");
-      video.src = src;
-      video.crossOrigin = "anonymous";
-      video.addEventListener("canplaythrough", () => {
-        const mediaSource = audioContext.createMediaElementSource(video);
-        mediaSourceRef.current = mediaSource;
-        mediaSource.connect(analyser);
-        analyser.connect(audioContext.destination);
+  const wavesurferRef = useRef<WaveSurfer | null>(null);
 
-        drawWaveform(analyser, ctx, canvas);
-      });
-    } else {
-      // Load and decode the audio file
-      const audio = new Audio(src);
-      const source = audioContext.createMediaElementSource(audio);
-      source.connect(analyser);
-      analyser.connect(audioContext.destination);
+  const handleWSMount = useCallback(
+    (waveSurfer: WaveSurfer) => {
+      wavesurferRef.current = waveSurfer;
 
-      drawWaveform(analyser, ctx, canvas);
-    }
+      if (wavesurferRef.current) {
+        wavesurferRef.current.load(`/${videoId}_full.mp3`);
 
-    return () => {
-      audioCtx.current?.close();
-    };
-  }, [src, isVideo]);
+        wavesurferRef.current.on("region-created", regionCreatedHandler);
 
-  return <canvas ref={canvasRef} width={windowWidth} height="70" />;
-};
+        wavesurferRef.current.on("ready", () => {
+          console.log("WaveSurfer is ready");
+          setIsLoaded(true);
+        });
 
-const drawWaveform = (
-  analyser: AnalyserNode,
-  ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement
-) => {
-  const bufferLength = analyser.fftSize;
-  const dataArray = new Uint8Array(bufferLength);
+        // wavesurferRef.current.on("region-removed", (region) => {
+        //   console.log("region-removed --> ", region);
+        // });
 
-  const draw = () => {
-    requestAnimationFrame(draw);
+        // wavesurferRef.current.on("loading", (data) => {
+        //   console.log("loading --> ", data);
+        // });
 
-    analyser.getByteTimeDomainData(dataArray);
-
-    ctx.fillStyle = "rgb(0, 0, 0)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgb(0, 255, 0)";
-
-    ctx.beginPath();
-
-    const sliceWidth = canvas.width / bufferLength;
-    let x = 0;
-
-    for (let i = 0; i < bufferLength; i++) {
-      const v = dataArray[i] / 128.0;
-      const y = (v * canvas.height) / 2;
-
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
+        if (window) {
+          // @ts-ignore
+          window.surferidze = wavesurferRef.current;
+        }
       }
+    },
+    [regionCreatedHandler]
+  );
 
-      x += sliceWidth;
-    }
+  // const generateRegion = useCallback(() => {
+  //   if (!wavesurferRef.current) return;
+  //   const minTimestampInSeconds = 0;
+  //   const maxTimestampInSeconds = wavesurferRef.current.getDuration();
+  //   const distance = generateNum(0, 10);
+  //   const [min, max] = generateTwoNumsWithDistance(
+  //     distance,
+  //     minTimestampInSeconds,
+  //     maxTimestampInSeconds
+  //   );
 
-    ctx.lineTo(canvas.width, canvas.height / 2);
-    ctx.stroke();
-  };
+  //   const r = generateNum(0, 255);
+  //   const g = generateNum(0, 255);
+  //   const b = generateNum(0, 255);
 
-  draw();
-};
+  //   setRegions([
+  //     ...regions,
+  //     {
+  //       id: `custom-${generateNum(0, 9999)}`,
+  //       start: min,
+  //       end: max,
+  //       color: `rgba(${r}, ${g}, ${b}, 0.5)`,
+  //     },
+  //   ]);
+  // }, [regions, wavesurferRef]);
 
-export default AudioVisualizer;
+  // const generateMarker = useCallback(() => {
+  //   if (!wavesurferRef.current) return;
+  //   const minTimestampInSeconds = 0;
+  //   const maxTimestampInSeconds = wavesurferRef.current.getDuration();
+  //   const distance = generateNum(0, 10);
+  //   const [min] = generateTwoNumsWithDistance(
+  //     distance,
+  //     minTimestampInSeconds,
+  //     maxTimestampInSeconds
+  //   );
+
+  //   const r = generateNum(0, 255);
+  //   const g = generateNum(0, 255);
+  //   const b = generateNum(0, 255);
+
+  //   setMarkers([
+  //     ...markers,
+  //     {
+  //       label: `custom-${generateNum(0, 9999)}`,
+  //       time: min,
+  //       color: `rgba(${r}, ${g}, ${b}, 0.5)`,
+  //     },
+  //   ]);
+  // }, [markers, wavesurferRef]);
+
+  // const removeLastRegion = useCallback(() => {
+  //   let nextRegions = [...regions];
+
+  //   nextRegions.pop();
+
+  //   setRegions(nextRegions);
+  // }, [regions]);
+
+  // const removeLastMarker = useCallback(() => {
+  //   let nextMarkers = [...markers];
+
+  //   nextMarkers.pop();
+
+  //   setMarkers(nextMarkers);
+  // }, [markers]);
+
+  // const shuffleLastMarker = useCallback(() => {
+  //   setMarkers((prev) => {
+  //     const next = [...prev];
+  //     let lastIndex = next.length - 1;
+
+  //     const minTimestampInSeconds = 0;
+  //     const maxTimestampInSeconds = wavesurferRef?.current?.getDuration() || 0;
+  //     const distance = generateNum(0, 10);
+  //     const [min] = generateTwoNumsWithDistance(
+  //       distance,
+  //       minTimestampInSeconds,
+  //       maxTimestampInSeconds
+  //     );
+
+  //     next[lastIndex] = {
+  //       ...next[lastIndex],
+  //       time: min,
+  //     };
+
+  //     return next;
+  //   });
+  // }, []);
+
+  const play = useCallback(() => {
+    wavesurferRef.current?.playPause();
+  }, []);
+
+  // const handleRegionUpdate = useCallback((region, smth) => {
+  //   console.log("region-update-end --> region:", region);
+  //   console.log(smth);
+  // }, []);
+
+  // const handleMarkerUpdate = useCallback((marker, smth) => {
+  //   console.log("region-update-end --> marker:", marker);
+  //   console.log(smth);
+  // }, []);
+
+  // const setZoom50 = () => {
+  //   wavesurferRef.current?.zoom(50);
+  // };
+
+  return (
+    <div className="absolute top-0 left-0 right-0 bottom-0 z-20">
+      <div className="relative h-full -mt-7">
+        <WaveSurfer
+          // @ts-ignore
+          plugins={plugins}
+          // @ts-ignore
+          onMount={handleWSMount}
+          cursorColor="transparent"
+          container="#waveform"
+        >
+          <WaveForm id="waveform">
+            {/* {isLoaded &&
+              regions.map((regionProps) => (
+                <Region
+                  // onUpdateEnd={handleRegionUpdate}
+                  key={regionProps.id}
+                  {...regionProps}
+                />
+              ))}
+            {isLoaded &&
+              markers.map((markerProps) => (
+                <Marker
+                  key={markerProps.id}
+                  onUpdateEnd={handleMarkerUpdate}
+                  start={markerProps.time}
+                  color={markerProps.color}
+                  content={markerProps.label}
+                  drag={markerProps.draggable}
+                />
+              ))} */}
+          </WaveForm>
+          <div id="timeline" />
+        </WaveSurfer>
+        {/* <div>
+        <button onClick={generateRegion}>Generate region</button>
+        <button onClick={generateMarker}>Generte Marker</button>
+        <button onClick={play}>Play / Pause</button>
+        <button onClick={removeLastRegion}>Remove last region</button>
+        <button onClick={removeLastMarker}>Remove last marker</button>
+        <button onClick={shuffleLastMarker}>Shuffle last marker</button>
+        <button onClick={toggleTimeline}>Toggle timeline</button>
+        <button onClick={setZoom50}>zoom 50%</button>
+      </div> */}
+      </div>
+    </div>
+  );
+}
+
+export default AudioWave;

@@ -23,6 +23,7 @@ import {
   FaPause,
   FaPlay,
 } from "react-icons/fa";
+import { GoZoomIn, GoZoomOut } from "react-icons/go";
 
 const Timestamp = (props: { time: number; className?: string }) => {
   const time = props.time;
@@ -57,7 +58,7 @@ const Grabber = () => (
   </svg>
 );
 
-function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
+function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
   const [timings, setTimings] = useState<Timings[]>([
     {
       start: 0,
@@ -123,12 +124,7 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
 
   const parentVideoRef = useRef<HTMLDivElement>(null);
 
-  //Variable for error handling on the delete grabber functionality
-  const warnings = {
-    delete_grabber: (
-      <div>Please click on the grabber (either start or end) to delete it</div>
-    ),
-  };
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   useEffect(() => {
     if (playVideoRef.current) {
@@ -290,38 +286,6 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
     }
 
     addActiveSegments();
-  };
-
-  //Function handling thumbnail logic
-  const captureSnapshot = () => {
-    let video = playVideoRef.current;
-    if (!video) {
-      console.error("Video reference is undefined");
-      return;
-    }
-
-    const canvas = document.createElement("canvas");
-    // scale the canvas accordingly
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    // draw the video at that frame
-    const context = canvas.getContext("2d");
-    if (!context) {
-      console.error("Unable to get 2D context from canvas");
-      return;
-    }
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    // convert it to a usable data URL
-    const dataURL = canvas.toDataURL();
-    setImageUrl(dataURL);
-  };
-
-  //Function handling download of thumbnail logic
-  const downloadSnapshot = () => {
-    let a = document.createElement("a"); //Create <a>
-    a.href = imageUrl; //Image Base64 Goes here
-    a.download = "Thumbnail.png"; //File name Here
-    a.click(); //Downloaded file
   };
 
   //Function handling skip to previous logic
@@ -692,9 +656,19 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
     });
   };
 
+  const handleZoomIn = () => {
+    setZoomLevel(zoomLevel + 0.1); // Increase the zoom level by 0.1
+  };
+
+  const handleZoomOut = () => {
+    if (zoomLevel <= 1) {
+      return;
+    }
+    setZoomLevel(zoomLevel - 0.1); // Decrease the zoom level by 0.1
+  };
+
   return (
     <div className="wrapper">
-      {/* Main video element for the video editor */}
       <div
         className="mx-auto block relative w-auto h-auto max-w-[70%]"
         ref={parentVideoRef}
@@ -747,6 +721,12 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
           >
             <IoMdPhonePortrait />
           </button>
+          <button className="settings-control" onClick={handleZoomIn}>
+            <GoZoomIn />
+          </button>
+          <button className="settings-control" onClick={handleZoomOut}>
+            <GoZoomOut />
+          </button>
         </div>
         <div className="player-controls flex space-x-1 mx-2">
           <button
@@ -796,104 +776,117 @@ function Editor({ videoUrl, trimVideo, loading }: EditorProps) {
           </button>
         </div>
       </div>
-      <div className="playback mb-10">
-        <Timestamp time={0} className=" -bottom-8" />
-        {/* If there is an instance of the playVideoRef, render the trimmer markers */}
-        {timings.map((timing, index) => (
-          <div key={"segment_" + index} className="segment">
-            <div
-              id="grabberStart"
-              className="grabber start z-30 mr-1"
-              onMouseDown={() => {
-                // set time to start based on the position of the mouse X
-                if (deletingGrabber.deletingGrabber) {
-                  deleteGrabber(index);
-                } else {
-                  currentlyGrabbedRef.current = {
-                    index: index,
-                    type: "start",
-                  };
-                  window.addEventListener(
-                    "mousemove",
-                    handleMouseMoveWhenGrabbed
-                  );
-                  window.addEventListener(
-                    "mouseup",
-                    removeMouseMoveEventListener
-                  );
-                }
-              }}
-              style={{
-                left: `${
-                  (timing.start / (playVideoRef?.current?.duration || 1)) * 100
-                }%`,
-              }}
-            >
-              <Grabber />
-            </div>
-            {/* Markup and logic for the end trim marker */}
-            <div
-              id="grabberEnd"
-              className="grabber end z-30"
-              style={{
-                left: `${
-                  (timing.end / (playVideoRef?.current?.duration || 1)) * 100
-                }%`,
-              }}
-              //Events for desktop - End marker
-              onMouseDown={() => {
-                if (deletingGrabber.deletingGrabber) {
-                  deleteGrabber(index);
-                } else {
-                  currentlyGrabbedRef.current = {
-                    index: index,
-                    type: "end",
-                  };
-                  window.addEventListener(
-                    "mousemove",
-                    handleMouseMoveWhenGrabbed
-                  );
-                  window.addEventListener(
-                    "mouseup",
-                    removeMouseMoveEventListener
-                  );
-                }
-              }}
-            >
-              <Grabber />
-            </div>
-          </div>
-        ))}
+      <div className="w-full overflow-auto overflow-y-hidden">
         <div
-          className="seekable relative"
-          ref={playBackBarRef}
-          onClick={updateProgress}
-          onMouseMove={updateCursor}
-          onMouseLeave={() => setShowCursor(false)}
+          className="relative min-w-full"
+          style={{
+            width: `${100 * zoomLevel}%`, // Adjust the width based on the zoom level
+            overflow: "auto",
+            overflowY: "hidden",
+          }}
         >
-          {showCursor && (
+          <div className="playback mb-10">
+            <Timestamp time={0} className=" -bottom-8" />
+            {/* If there is an instance of the playVideoRef, render the trimmer markers */}
+            {timings.map((timing, index) => (
+              <div key={"segment_" + index} className="segment">
+                <div
+                  id="grabberStart"
+                  className="grabber start z-30 mr-1"
+                  onMouseDown={() => {
+                    // set time to start based on the position of the mouse X
+                    if (deletingGrabber.deletingGrabber) {
+                      deleteGrabber(index);
+                    } else {
+                      currentlyGrabbedRef.current = {
+                        index: index,
+                        type: "start",
+                      };
+                      window.addEventListener(
+                        "mousemove",
+                        handleMouseMoveWhenGrabbed
+                      );
+                      window.addEventListener(
+                        "mouseup",
+                        removeMouseMoveEventListener
+                      );
+                    }
+                  }}
+                  style={{
+                    left: `${
+                      (timing.start / (playVideoRef?.current?.duration || 1)) *
+                      100
+                    }%`,
+                  }}
+                >
+                  <Grabber />
+                </div>
+                {/* Markup and logic for the end trim marker */}
+                <div
+                  id="grabberEnd"
+                  className="grabber end z-30"
+                  style={{
+                    left: `${
+                      (timing.end / (playVideoRef?.current?.duration || 1)) *
+                      100
+                    }%`,
+                  }}
+                  //Events for desktop - End marker
+                  onMouseDown={() => {
+                    if (deletingGrabber.deletingGrabber) {
+                      deleteGrabber(index);
+                    } else {
+                      currentlyGrabbedRef.current = {
+                        index: index,
+                        type: "end",
+                      };
+                      window.addEventListener(
+                        "mousemove",
+                        handleMouseMoveWhenGrabbed
+                      );
+                      window.addEventListener(
+                        "mouseup",
+                        removeMouseMoveEventListener
+                      );
+                    }
+                  }}
+                >
+                  <Grabber />
+                </div>
+              </div>
+            ))}
             <div
-              className="absolute top-0 bottom-0 bg-red-800 z-50"
-              style={{
-                left: `${cursorX}px`,
-                width: "1px",
-              }}
+              className="seekable relative"
+              ref={playBackBarRef}
+              onClick={updateProgress}
+              onMouseMove={updateCursor}
+              onMouseLeave={() => setShowCursor(false)}
             >
-              <Timestamp time={cursorTime} className="-right-5 -top-7" />
+              {showCursor && (
+                <div
+                  className="absolute top-0 bottom-0 bg-red-800 z-50"
+                  style={{
+                    left: `${cursorX}px`,
+                    width: "1px",
+                  }}
+                >
+                  <Timestamp time={cursorTime} className="-right-5 -top-7" />
+                </div>
+              )}
+              <AudioVisualizer videoId={videoId} />
             </div>
-          )}
-        </div>
-        <div className="progress relative" ref={progressBarRef}>
-          <div className="absolute top-0 left-0 w-full h-full">
-            <Timestamp time={currentTime} className="-right-5 -top-7" />
+            <div className="progress relative" ref={progressBarRef}>
+              <div className="absolute top-0 left-0 w-full h-full">
+                <Timestamp time={currentTime} className="-right-5 -top-7" />
+              </div>
+            </div>
+            <Timestamp
+              time={playVideoRef?.current?.duration || 0}
+              className="-right-5 -bottom-8"
+            />
           </div>
         </div>
-        <Timestamp
-          time={playVideoRef?.current?.duration || 0}
-          className="-right-5 -bottom-8"
-        />
       </div>
-      {/* <AudioVisualizer src={videoUrl} isVideo={true} /> */}
     </div>
   );
 }

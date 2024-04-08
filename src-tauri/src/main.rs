@@ -265,6 +265,7 @@ async fn merge_audio(video_id: &str, audio_format: &str) -> Result<String, Strin
     let video_input = format!("../public/{}_noaudio.mp4", video_id);
     let audio_input = format!("../public/{}.{}", video_id, audio_format);
     let output = format!("../public/{}.mp4", video_id);
+    let mp3_output = format!("../public/{}_full.mp3", video_id);
 
     let output = Command::new("ffmpeg")
         .args(&[
@@ -283,6 +284,30 @@ async fn merge_audio(video_id: &str, audio_format: &str) -> Result<String, Strin
         ])
         .output()
         .expect("failed to execute process");
+
+    // Convert audio to mp3 if it's not already in mp3 format
+    if audio_format != "mp3" {
+        Command::new("ffmpeg")
+            .args(&[
+                "-y",
+                "-i",
+                &audio_input,
+                "-vn",
+                "-ar",
+                "44100",
+                "-ac",
+                "2",
+                "-b:a",
+                "192k",
+                &mp3_output,
+            ])
+            .output()
+            .expect("failed to execute process");
+
+        // Delete the original audio file
+        fs::remove_file(&audio_input).expect("failed to remove original audio file");
+    }
+    fs::remove_file(&video_input).expect("failed to remove original no audio video file");
 
     let output = String::from_utf8_lossy(&output.stdout);
     Ok(output.to_string())
@@ -303,6 +328,16 @@ async fn download_youtube_video(url: String) -> Result<String, String> {
     };
 
     let video = Video::new_with_options(url.clone(), video_options).unwrap();
+    let video_info = video.get_info().await.unwrap();
+    let video_id = video_info.video_details.video_id;
+    let video_path = std::path::Path::new("../public")
+        .join(format!("{}", &video_id))
+        .with_extension("mp4");
+
+    if video_path.exists() {
+        return Ok(video_id);
+    }
+
     let audio = Video::new_with_options(url, audio_options).unwrap();
 
     let audio_extension = audio
@@ -315,10 +350,6 @@ async fn download_youtube_video(url: String) -> Result<String, String> {
         .max_by_key(|f| f.bitrate)
         .map(|f| f.mime_type.container.to_string())
         .unwrap();
-
-    let video_info = video.get_info().await.unwrap();
-
-    let video_id = video_info.video_details.video_id;
 
     let video_path = std::path::Path::new("../public")
         .join(format!("{}_noaudio", &video_id))
