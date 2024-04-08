@@ -114,7 +114,7 @@ body {
   position: absolute;
   top: -4px;
   bottom: -4px;
-  width: 20px;
+  width: 15px;
   border-radius: 2px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
   cursor: pointer;
@@ -125,10 +125,10 @@ body {
 }
 
 .playback .grabber.start {
-  background: #a7d73694;
+  background: #a7d736c0;
 }
 .playback .grabber.end {
-  background: #fc424280;
+  background: #fc4242c4;
 }
 .playback .grabber:hover {
   transform: scaleY(1.4);

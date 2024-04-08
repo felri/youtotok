@@ -1,5 +1,5 @@
 // /* eslint-disable func-names */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, WheelEvent } from "react";
 import type {
   Dimensions,
   DraggableEventHandler,
@@ -7,6 +7,7 @@ import type {
   GrabberProps,
   Timings,
 } from "./types";
+import { useStore } from "../../store";
 import AudioVisualizer from "./AudioWave";
 import { IoMdPhonePortrait } from "react-icons/io";
 import { Rnd, RndResizeCallback } from "react-rnd";
@@ -59,12 +60,8 @@ const Grabber = () => (
 );
 
 function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
-  const [timings, setTimings] = useState<Timings[]>([
-    {
-      start: 0,
-      end: 0,
-    },
-  ]);
+  const { currentTimings, setCurrentTimings } = useStore();
+  const [timings, setTimings] = useState<Timings[]>(currentTimings);
 
   const initialWidth = 200;
   const initialHeight = 356;
@@ -99,16 +96,7 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
     currentWarning: null,
   });
 
-  //State for error handling
-  const [currentWarning, setCurrentWarning] = useState(null);
-
   const [showPhoneModal, setShowPhoneModal] = useState(false);
-
-  //State for imageUrl
-  const [imageUrl, setImageUrl] = useState("");
-
-  // //Integer state to blue progress bar as video plays
-  // const [seekerBar, setSeekerBar] = useState(0);
 
   //Ref handling metadata needed for trim markers
   const currentlyGrabbedRef = useRef({ index: 0, type: "none" });
@@ -125,6 +113,10 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
   const parentVideoRef = useRef<HTMLDivElement>(null);
 
   const [zoomLevel, setZoomLevel] = useState(1);
+
+  useEffect(() => {
+    setCurrentTimings(timings);
+  }, [timings]);
 
   useEffect(() => {
     if (playVideoRef.current) {
@@ -269,8 +261,6 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
       deletingGrabber: false,
       currentWarning: null,
     });
-    setCurrentWarning(null);
-    setImageUrl("");
 
     if (playVideoRef.current) {
       setTimings([{ start: 0, end: playVideoRef.current.duration }]);
@@ -321,16 +311,6 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
     if (playing) {
       playVideoRef.current.pause();
     } else {
-      if (playVideoRef.current.currentTime >= timings[timings.length - 1].end) {
-        playVideoRef.current.pause();
-        playVideoRef.current.currentTime = timings[0].start;
-
-        currentlyGrabbedRef.current = { index: 0, type: "start" };
-        progressBarRef.current.style.left = `${
-          (timings[0].start / playVideoRef.current.duration) * 100
-        }%`;
-        progressBarRef.current.style.width = "0%";
-      }
       playVideoRef?.current?.play();
     }
     setPlaying(!playing);
@@ -507,7 +487,7 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
 
     // Add final inactive segment
     const finalInactiveStart =
-      (timings[timings.length - 1].end / videoLength) * 100 + 1;
+      (timings[timings.length - 1].end / videoLength) * 100;
 
     // Add overlay div for final inactive segment
     overlays.push({
@@ -615,10 +595,10 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
   };
 
   const handleResize: RndResizeCallback = (
-    e,
+    _,
     dir,
     refToElement,
-    delta,
+    __,
     position
   ) => {
     const aspectRatio = initialWidth / initialHeight;
@@ -647,7 +627,7 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
     });
   };
 
-  const handleDrag: DraggableEventHandler = (e, data) => {
+  const handleDrag: DraggableEventHandler = (_, data) => {
     setDimensions({
       x: data.x,
       y: data.y,
@@ -657,7 +637,8 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
   };
 
   const handleZoomIn = () => {
-    setZoomLevel(zoomLevel + 0.1); // Increase the zoom level by 0.1
+    setZoomLevel(zoomLevel + 0.1);
+    addActiveSegments();
   };
 
   const handleZoomOut = () => {
@@ -665,6 +646,19 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
       return;
     }
     setZoomLevel(zoomLevel - 0.1); // Decrease the zoom level by 0.1
+    addActiveSegments();
+  };
+
+  // handle zoom by scroll wheel when shift key is pressed
+  const handleScroll = (e: WheelEvent<HTMLDivElement>) => {
+    if (!e.shiftKey) {
+      return;
+    }
+    if (e.deltaY < 0) {
+      handleZoomIn();
+    } else {
+      handleZoomOut();
+    }
   };
 
   return (
@@ -785,14 +779,14 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
             overflowY: "hidden",
           }}
         >
-          <div className="playback mb-10">
+          <div className="playback mb-10" onWheel={handleScroll}>
             <Timestamp time={0} className=" -bottom-8" />
             {/* If there is an instance of the playVideoRef, render the trimmer markers */}
             {timings.map((timing, index) => (
               <div key={"segment_" + index} className="segment">
                 <div
                   id="grabberStart"
-                  className="grabber start z-30 mr-1"
+                  className="grabber start z-30 -ml-4"
                   onMouseDown={() => {
                     // set time to start based on the position of the mouse X
                     if (deletingGrabber.deletingGrabber) {
