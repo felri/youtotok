@@ -263,7 +263,7 @@ async fn check_subtitles(video_id: String) -> Result<bool, String> {
 
 async fn merge_audio(video_id: &str, audio_format: &str) -> Result<String, String> {
     let video_input = format!("../public/{}_noaudio.mp4", video_id);
-    let audio_input = format!("../public/{}.{}", video_id, audio_format);
+    let audio_input = format!("../public/{}_audio_track.{}", video_id, audio_format);
     let output = format!("../public/{}.mp4", video_id);
     let mp3_output = format!("../public/{}_full.mp3", video_id);
 
@@ -356,7 +356,7 @@ async fn download_youtube_video(url: String) -> Result<String, String> {
         .with_extension("mp4");
 
     let audio_path = std::path::Path::new("../public")
-        .join(&video_id)
+        .join(format!("{}_audio_track", &video_id))
         .with_extension(&audio_extension);
 
     if video_path.exists() {

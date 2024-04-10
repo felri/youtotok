@@ -13,12 +13,26 @@ function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
     background: "#00000000",
     fontFamily: "sans-serif",
     textShadow: "2px 2px 4px #000000",
-    fontSize: "40px",
+    fontSize: "50px",
   };
   const { videoId } = useStore();
   const [text, setText] = useState("");
   const [style, setStyle] = useState<CueVtt>(defaultCueVtt);
   const [lineValue, setLineValue] = useState(50);
+
+  useEffect(() => {
+    if (!text) return;
+    processVtt();
+  }, [style, lineValue]);
+
+  useEffect(() => {
+    if (!videoId) return;
+    if (type === "none") {
+      setText("");
+      return;
+    }
+    loadVtt();
+  }, [videoId, type]);
 
   function processVtt() {
     // Remove styles
@@ -88,10 +102,6 @@ function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
     saveVtt(finalText);
   }
 
-  useEffect(() => {
-    processVtt();
-  }, [style, lineValue]);
-
   async function loadVtt() {
     if (!videoId) return;
 
@@ -100,12 +110,11 @@ function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
       return;
     }
 
-    await invoke("load_vtt", { videoId, subType: type }).then((response) => {
-      setText(response as string);
-      setTimeout(() => {
-        processVtt();
-      }, 50);
-    });
+    const textFromFile = (await invoke("load_vtt", {
+      videoId,
+      subType: type,
+    })) as string;
+    setText(textFromFile);
   }
 
   function handleStyleChange(newStyle: Partial<CueVtt>) {
@@ -121,10 +130,6 @@ function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
     // for the changes to take effect, we need to reload the video
     reloadVideo();
   }
-
-  useEffect(() => {
-    loadVtt();
-  }, [videoId, type]);
 
   function handleLineChange(direction: "up" | "down") {
     if (direction === "down") {

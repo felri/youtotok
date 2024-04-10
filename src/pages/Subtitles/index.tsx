@@ -74,7 +74,7 @@ function SubtitleOptions({
       <h2>Subtitles</h2>
       <button
         className={`bg-green-900 text-white p-2 rounded-md w-30 ${
-          type === "words" ? "bg-green-500" : ""
+          type === "words" ? "!bg-green-500" : ""
         }`}
         onClick={() => setType("words")}
       >
@@ -82,7 +82,7 @@ function SubtitleOptions({
       </button>
       <button
         className={`bg-green-900 text-white p-2 rounded-md w-30 ${
-          type === "segments" ? "bg-green-500" : ""
+          type === "segments" ? "!bg-green-500" : ""
         }`}
         onClick={() => setType("segments")}
       >
@@ -90,7 +90,7 @@ function SubtitleOptions({
       </button>
       <button
         className={`bg-green-900 text-white p-2 rounded-md w-30 ${
-          type === "none" ? "bg-green-500" : ""
+          type === "none" ? "!bg-green-500" : ""
         }`}
         onClick={() => setType("none")}
       >
@@ -177,6 +177,12 @@ function SubtitlesPage() {
     localStorage.setItem("openAiApiKey", apiKey);
   }, [apiKey]);
 
+  useEffect(() => {
+    if (showVideo && subtitlesExist) {
+      enableSubtitle(subtitleType);
+    }
+  }, [showVideo]);
+
   async function createSubtitles() {
     setLoading(true);
     await invoke<string>("transcribe_audio", {
@@ -190,21 +196,19 @@ function SubtitlesPage() {
   async function checkSubtitles() {
     if (subtitlesExist) {
       setSubtitleType("words");
-      reloadVideo();
       return;
     }
-    const response = await invoke<boolean>("check_subtitles", {
+    const result = await invoke<boolean>("check_subtitles", {
       videoId,
     });
-    setSubtitlesExist(response);
-    await enableSubtitle("words");
-    reloadVideo();
+    setSubtitlesExist(result);
+    setSubtitleType("words");
+    setTimeout(() => {
+      reloadVideo();
+    }, 100);
   }
 
   async function enableSubtitle(type: "words" | "segments" | "none") {
-    // sleep for a bit to allow the video to reload
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
     const video = videoRef.current;
     if (!video) return;
 
@@ -218,15 +222,12 @@ function SubtitlesPage() {
       }
     }
     setSubtitleType(type);
-    return;
   }
 
   async function reloadVideo() {
     setShowVideo(false);
     await new Promise((resolve) => setTimeout(resolve, 50));
     setShowVideo(true);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    enableSubtitle(subtitleType);
   }
 
   return (
@@ -264,7 +265,7 @@ function SubtitlesPage() {
                   <track
                     label="segments"
                     kind="subtitles"
-                    srcLang="en"
+                    // srcLang="en"
                     src={`./${videoId}.vtt`}
                   />
                 </>

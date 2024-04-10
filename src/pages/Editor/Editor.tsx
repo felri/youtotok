@@ -661,6 +661,20 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
     }
   };
 
+  const handleGrabberMouseDown = (index: number, type: "start" | "end") => {
+    if (deletingGrabber.deletingGrabber) {
+      deleteGrabber(index);
+    } else {
+      currentlyGrabbedRef.current = {
+        index: index,
+        type: type,
+      };
+
+      window.addEventListener("mousemove", handleMouseMoveWhenGrabbed);
+      window.addEventListener("mouseup", removeMouseMoveEventListener);
+    }
+  };
+
   return (
     <div className="wrapper">
       <div
@@ -787,25 +801,7 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
                 <div
                   id="grabberStart"
                   className="grabber start z-30 -ml-4"
-                  onMouseDown={() => {
-                    // set time to start based on the position of the mouse X
-                    if (deletingGrabber.deletingGrabber) {
-                      deleteGrabber(index);
-                    } else {
-                      currentlyGrabbedRef.current = {
-                        index: index,
-                        type: "start",
-                      };
-                      window.addEventListener(
-                        "mousemove",
-                        handleMouseMoveWhenGrabbed
-                      );
-                      window.addEventListener(
-                        "mouseup",
-                        removeMouseMoveEventListener
-                      );
-                    }
-                  }}
+                  onMouseDown={() => handleGrabberMouseDown(index, "start")}
                   style={{
                     left: `${
                       (timing.start / (playVideoRef?.current?.duration || 1)) *
@@ -815,34 +811,17 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
                 >
                   <Grabber />
                 </div>
+
                 {/* Markup and logic for the end trim marker */}
                 <div
                   id="grabberEnd"
                   className="grabber end z-30"
+                  onMouseDown={() => handleGrabberMouseDown(index, "end")}
                   style={{
                     left: `${
                       (timing.end / (playVideoRef?.current?.duration || 1)) *
                       100
                     }%`,
-                  }}
-                  //Events for desktop - End marker
-                  onMouseDown={() => {
-                    if (deletingGrabber.deletingGrabber) {
-                      deleteGrabber(index);
-                    } else {
-                      currentlyGrabbedRef.current = {
-                        index: index,
-                        type: "end",
-                      };
-                      window.addEventListener(
-                        "mousemove",
-                        handleMouseMoveWhenGrabbed
-                      );
-                      window.addEventListener(
-                        "mouseup",
-                        removeMouseMoveEventListener
-                      );
-                    }
                   }}
                 >
                   <Grabber />
@@ -869,7 +848,10 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
               )}
               <AudioVisualizer videoId={videoId} />
             </div>
-            <div className="progress relative" ref={progressBarRef}>
+            <div
+              className="progress relative"
+              ref={progressBarRef}
+            >
               <div className="absolute top-0 left-0 w-full h-full">
                 <Timestamp time={currentTime} className="-right-5 -top-7" />
               </div>
