@@ -10,13 +10,13 @@ function AudioWave({ videoId }: AudioWaveProps) {
   const plugins = useMemo(() => {
     return [
       {
-        key: "top-timeline",
+        key: "bottom-timeline",
         plugin: TimelinePlugin,
         options: {
-          height: 20,
+          height: 25,
           insertPosition: "beforebegin",
           style: {
-            color: "#ccc",
+            color: "#fff",
           },
         },
       },
@@ -44,8 +44,13 @@ function AudioWave({ videoId }: AudioWaveProps) {
 
   return (
     <div className="absolute top-0 left-0 right-0 bottom-0 z-20">
-      <div className="relative h-full -mt-7">
+      <div className="relative h-[70px]">
         <WaveSurfer
+          autoScroll
+          barWidth={2}
+          progressColor="#f6ad55"
+          responsive
+          height={70}
           // @ts-ignore
           plugins={plugins}
           // @ts-ignore
@@ -53,7 +58,7 @@ function AudioWave({ videoId }: AudioWaveProps) {
           cursorColor="transparent"
           container="#waveform"
         >
-          <WaveForm id="waveform"></WaveForm>
+          <WaveForm id="waveform" />
           <div id="timeline" />
         </WaveSurfer>
       </div>

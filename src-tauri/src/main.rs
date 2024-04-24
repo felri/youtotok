@@ -178,9 +178,6 @@ fn condense_subtitle(subtitle_text: &str, words_per_line: usize) -> Vec<String> 
 #[tauri::command]
 async fn transcribe_audio(video_id: &str, api_key: &str, language: &str) -> Result<(), String> {
     println!("Transcribing audio...");
-    println!("Video ID: {}", video_id);
-    println!("API Key: {}", api_key);
-
     remove_subtitles(video_id);
 
     let file_part = reqwest::multipart::Part::bytes(
@@ -585,6 +582,23 @@ fn vtt_to_ass(video_id: &str, sub_type: &str, video_height: i32) -> Result<(), S
 }
 
 #[tauri::command]
+async fn clean_files(video_id: &str) -> Result<(), String> {
+    // loop through all files in the public folder and delete files with the video_id in the name
+    let paths: fs::ReadDir = fs::read_dir("../public").unwrap();
+    for path in paths {
+        let path = path.unwrap().path();
+        if let Some(file_name) = path.file_name() {
+            let file_name = file_name.to_str().unwrap();
+            if file_name.contains(video_id) {
+                fs::remove_file(path).unwrap();
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn burn_subtitles(
     video_id: String,
     sub_type: String,
@@ -652,7 +666,8 @@ fn main() {
             check_subtitles,
             load_vtt,
             update_vtt,
-            burn_subtitles
+            burn_subtitles,
+            clean_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

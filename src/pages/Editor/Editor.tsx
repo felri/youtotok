@@ -126,16 +126,32 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
     }
   }, [playVideoRef.current]);
 
-  useEffect(() => {
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key === " ") {
-        playPause();
-      }
-      if (event.key === "m") {
-        setIsMuted(!isMuted);
-      }
-    };
+  const handleKeyUp = (event: KeyboardEvent) => {
+    if (event.key === " ") {
+      playPause();
+    }
+    if (event.key === "m") {
+      setIsMuted(!isMuted);
+    }
+    // if i, set the start time of the current segment to the current time
+    if (event.key === "i") {
+      const index = currentlyGrabbedRef.current.index;
+      const time = timings;
+      time[index].start = playVideoRef.current?.currentTime || 0;
+      setTimings(time);
+      addActiveSegments();
+    }
+    // if o, set the end time of the current segment to the current time
+    if (event.key === "o") {
+      const index = currentlyGrabbedRef.current.index;
+      const time = timings;
+      time[index].end = playVideoRef.current?.currentTime || 0;
+      setTimings(time);
+      addActiveSegments();
+    }
+  };
 
+  useEffect(() => {
     window.addEventListener("keyup", handleKeyUp);
 
     return () => {
@@ -157,7 +173,7 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
     // set the cursor time
     setCursorTime(
       ((e.clientX - rect.left) / rect.width) *
-        (playVideoRef?.current?.duration || 0)
+      (playVideoRef?.current?.duration || 0)
     );
   };
 
@@ -267,11 +283,10 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
     }
 
     if (progressBarRef.current) {
-      progressBarRef.current.style.left = `${
-        (timings[0].start /
+      progressBarRef.current.style.left = `${(timings[0].start /
           (playVideoRef.current ? playVideoRef.current.duration : 1)) *
         100
-      }%`;
+        }%`;
       progressBarRef.current.style.width = "0%";
     }
 
@@ -291,9 +306,8 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
 
     currentlyGrabbedRef.current = { index: prevIndex, type: "start" };
 
-    progressBarRef.current.style.left = `${
-      (timings[prevIndex].start / playVideoRef.current.duration) * 100
-    }%`;
+    progressBarRef.current.style.left = `${(timings[prevIndex].start / playVideoRef.current.duration) * 100
+      }%`;
 
     progressBarRef.current.style.width = "0%";
 
@@ -329,9 +343,8 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
 
     currentlyGrabbedRef.current = { index: nextIndex, type: "start" };
 
-    progressBarRef.current.style.left = `${
-      (timings[nextIndex].start / playVideoRef.current.duration) * 100
-    }%`;
+    progressBarRef.current.style.left = `${(timings[nextIndex].start / playVideoRef.current.duration) * 100
+      }%`;
 
     progressBarRef.current.style.width = "0%";
 
@@ -421,9 +434,8 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
     }
     time.splice(index, 1);
     if (progressBarRef.current && playVideoRef.current) {
-      progressBarRef.current.style.left = `${
-        (time[0].start / playVideoRef.current.duration) * 100
-      }%`;
+      progressBarRef.current.style.left = `${(time[0].start / playVideoRef.current.duration) * 100
+        }%`;
       playVideoRef.current.currentTime = time[0].start;
       progressBarRef.current.style.width = "0%";
     }
@@ -587,9 +599,8 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
 
       if (currentSegment) {
         // set progressbar position based on the current segment
-        progressBarRef.current.style.left = `${
-          (timings[0].start / playVideo.duration) * 100
-        }%`;
+        progressBarRef.current.style.left = `${(timings[0].start / playVideo.duration) * 100
+          }%`;
       }
     }
   };
@@ -803,10 +814,9 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
                   className="grabber start z-30 -ml-4"
                   onMouseDown={() => handleGrabberMouseDown(index, "start")}
                   style={{
-                    left: `${
-                      (timing.start / (playVideoRef?.current?.duration || 1)) *
+                    left: `${(timing.start / (playVideoRef?.current?.duration || 1)) *
                       100
-                    }%`,
+                      }%`,
                   }}
                 >
                   <Grabber />
@@ -818,10 +828,9 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
                   className="grabber end z-30"
                   onMouseDown={() => handleGrabberMouseDown(index, "end")}
                   style={{
-                    left: `${
-                      (timing.end / (playVideoRef?.current?.duration || 1)) *
+                    left: `${(timing.end / (playVideoRef?.current?.duration || 1)) *
                       100
-                    }%`,
+                      }%`,
                   }}
                 >
                   <Grabber />
