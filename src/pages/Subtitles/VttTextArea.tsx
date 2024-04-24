@@ -10,7 +10,7 @@ function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
   const defaultCueVtt: CueVtt = {
     color: "#fccb00",
     fontWeight: "bold",
-    background: "#00000000",
+    outlinecolor: "#00000000",
     fontFamily: "sans-serif",
     textShadow: "2px 2px 4px #000000",
     fontSize: "50px",
@@ -66,7 +66,7 @@ function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
     lines = textWithoutStyle.split("\n");
     newLines = lines.map((line) => {
       if (line.startsWith("WEBVTT")) {
-        return `WEBVTT\n\nSTYLE\n::cue {\ncolor: ${style.color};\nfont-weight: ${style.fontWeight};\nbackground-color: ${style.background};\nfont-family: ${style.fontFamily};\ntext-shadow: ${style.textShadow};\nfont-size: ${style.fontSize};\n}`;
+        return `WEBVTT\n\nSTYLE\n::cue {\ncolor: ${style.color};\nfont-weight: ${style.fontWeight};\noutline-color: ${style.outlinecolor};\nfont-family: ${style.fontFamily};\ntext-shadow: ${style.textShadow};\nfont-size: ${style.fontSize};\nbackground-color: #00000000;\n}\n\n`;
       }
       return line;
     });
@@ -175,12 +175,12 @@ function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
         <DirectionalButtons moveLine={handleLineChange} />
         <div className="flex justify-start flex-col items-start mb-4">
           <label className="mb-2">
-            Background{" "}
+            Outline{" "}
             <button
               className="text-xm p-0"
               onClick={() => {
                 handleStyleChange({
-                  background: "#00000000",
+                  outlinecolor: "#00000000",
                 });
               }}
             >
@@ -191,7 +191,7 @@ function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
             color={style.color}
             onChangeComplete={(color) =>
               handleStyleChange({
-                background: color.hex,
+                outlinecolor: color.hex,
               })
             }
           />

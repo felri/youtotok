@@ -8,7 +8,39 @@ import {
   SubtitleOptionsProps,
   GenerateSubtitlesButtonProps,
   ApiKeyComponentProps,
+  LanguageSelectProps,
 } from "../Editor/types";
+
+function LanguageSelect({
+  selectedLanguage,
+  setSelectedLanguage,
+}: LanguageSelectProps) {
+  return (
+    <div className="flex justify-center items-center space-x-4">
+      <div className="flex justify-center items-center space-x-4 py-4">
+        <label htmlFor="language-select">Select language for translation</label>
+        <select
+          className="bg-gray-100 p-2 rounded-md"
+          value={selectedLanguage}
+          onChange={(e) => setSelectedLanguage(e.target.value)}
+        >
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="it">Italian</option>
+          <option value="pt">Portuguese</option>
+          <option value="ja">Japanese</option>
+          <option value="ko">Korean</option>
+          <option value="zh">Chinese</option>
+          <option value="ru">Russian</option>
+          <option value="ar">Arabic</option>
+          <option value="hi">Hindi</option>
+        </select>
+      </div>
+    </div>
+  );
+}
 
 function ApiKeyComponent({ apiKey, setApiKey }: ApiKeyComponentProps) {
   return (
@@ -79,6 +111,22 @@ function SubtitleOptions({
         onClick={() => setType("words")}
       >
         WORD
+      </button>
+      <button
+        className={`bg-green-900 text-white p-2 rounded-md w-30 ${
+          type === "3words" ? "!bg-green-500" : ""
+        }`}
+        onClick={() => setType("3words")}
+      >
+        3 WORDS
+      </button>
+      <button
+        className={`bg-green-900 text-white p-2 rounded-md w-30 ${
+          type === "4words" ? "!bg-green-500" : ""
+        }`}
+        onClick={() => setType("4words")}
+      >
+        4 WORDS
       </button>
       <button
         className={`bg-green-900 text-white p-2 rounded-md w-30 ${
@@ -157,8 +205,9 @@ function SubtitlesPage() {
   const [subtitlesExist, setSubtitlesExist] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [showVideo, setShowVideo] = useState(true);
+  const [language, setLanguage] = useState("en");
   const [subtitleType, setSubtitleType] = useState<
-    "words" | "segments" | "none"
+    "words" | "3words" | "4words" | "segments" | "none"
   >("none");
 
   useEffect(() => {
@@ -185,10 +234,13 @@ function SubtitlesPage() {
 
   async function createSubtitles() {
     setLoading(true);
+    setSubtitlesExist(false);
     await invoke<string>("transcribe_audio", {
       apiKey,
       videoId,
+      language,
     });
+    setSubtitlesExist(true);
     setLoading(false);
     checkSubtitles();
   }
@@ -196,19 +248,19 @@ function SubtitlesPage() {
   async function checkSubtitles() {
     if (subtitlesExist) {
       setSubtitleType("words");
-      return;
+    } else {
+      const result = await invoke<boolean>("check_subtitles", {
+        videoId,
+      });
+      setSubtitlesExist(result);
+      setSubtitleType("words");
     }
-    const result = await invoke<boolean>("check_subtitles", {
-      videoId,
-    });
-    setSubtitlesExist(result);
-    setSubtitleType("words");
     setTimeout(() => {
       reloadVideo();
     }, 100);
   }
 
-  async function enableSubtitle(type: "words" | "segments" | "none") {
+  async function enableSubtitle(type: "words" | "3words" | "4words" | "segments" | "none") {
     const video = videoRef.current;
     if (!video) return;
 
@@ -239,6 +291,10 @@ function SubtitlesPage() {
         apiKey={apiKey}
         subtitlesExist={subtitlesExist}
       />
+      <LanguageSelect
+        selectedLanguage={language}
+        setSelectedLanguage={setLanguage}
+      />
       <div className="flex justify-center items-center space-x-4 pt-4">
         <div className="flex justify-center flex-col">
           {showVideo && (
@@ -263,6 +319,18 @@ function SubtitlesPage() {
                     src={`./${videoId}_words.vtt`}
                   />
                   <track
+                    label="3words"
+                    kind="subtitles"
+                    srcLang="en"
+                    src={`./${videoId}_3words.vtt`}
+                  />
+                  <track
+                    label="4words"
+                    kind="subtitles"
+                    srcLang="en"
+                    src={`./${videoId}_4words.vtt`}
+                  />
+                  <track
                     label="segments"
                     kind="subtitles"
                     // srcLang="en"
@@ -284,7 +352,9 @@ function SubtitlesPage() {
             videoRef={videoRef}
           />
         </div>
-        <VttTextArea type={subtitleType} reloadVideo={reloadVideo} />
+        {subtitlesExist && (
+          <VttTextArea type={subtitleType} reloadVideo={reloadVideo} />
+        )}
       </div>
     </div>
   );

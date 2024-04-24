@@ -2,10 +2,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use reqwest::multipart;
 use rsubs_lib::vtt;
-use rusty_ytdl::{Video, VideoFormat, VideoOptions, VideoQuality, VideoSearchOptions};
+use rusty_ytdl::{Video, VideoOptions, VideoQuality, VideoSearchOptions};
 use serde_json::Value;
 use std::io::BufRead;
 use std::{fs, io::BufReader, path::Path, process::Command}; // Import the BufRead trait
+
+#[derive(Debug, Clone)]
+struct SubtitleLine {
+    start: String,
+    end: String,
+    text: String,
+}
 #[derive(Debug, serde::Deserialize)]
 struct Timing {
     start: f32,
@@ -101,11 +108,85 @@ async fn extract_audio(video_id: String, audio_format: String) -> Result<String,
     Ok(output.to_string())
 }
 
+fn remove_subtitles(video_id: &str) {
+    let paths = vec![
+        format!("../public/{}.vtt", video_id),
+        format!("../public/{}_words.vtt", video_id),
+        format!("../public/{}_3words.vtt", video_id),
+        format!("../public/{}_segments.vtt", video_id),
+        format!("../public/{}_pixel.vtt", video_id),
+    ];
+
+    for path in paths {
+        if let Err(e) = fs::remove_file(&path) {
+            println!("Error removing file: {}", e);
+        }
+    }
+}
+
+fn condense_subtitle(subtitle_text: &str, words_per_line: usize) -> Vec<String> {
+    let mut lines = subtitle_text.lines();
+    let mut condensed_lines: Vec<String> = Vec::new();
+    let mut current_line: Vec<String> = Vec::new();
+    let mut start_time = String::new();
+    let mut end_time = String::new();
+    let mut text_on_next_line = false;
+
+    // Add "WEBVTT" without changes if present
+    if let Some(first_line) = lines.next() {
+        if first_line.trim() == "WEBVTT" {
+            condensed_lines.push(first_line.to_owned());
+            condensed_lines.push("".to_owned());
+            // Ignore the following empty line after "WEBVTT"
+            lines.next();
+        }
+    }
+
+    for line in lines {
+        if text_on_next_line {
+            current_line.push(line.trim().to_owned());
+            text_on_next_line = false;
+            continue;
+        }
+
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 3 {
+            // Assuming the line is a timestamp line
+            if current_line.len() >= words_per_line {
+                condensed_lines.push(format!("{} --> {} line:50%", start_time, end_time));
+                condensed_lines.push(current_line.join(" "));
+                condensed_lines.push("".to_owned());
+                current_line.clear();
+            }
+
+            if current_line.is_empty() {
+                start_time = parts[0].to_owned();
+            }
+            end_time = parts[2].to_owned();
+            text_on_next_line = true;
+        }
+    }
+
+    // Handle any remaining text
+    if !current_line.is_empty() {
+        condensed_lines.push(format!("{} --> {} line:50%", start_time, end_time));
+        condensed_lines.push(current_line.join(" "));
+    }
+
+    condensed_lines
+}
+
 #[tauri::command]
-async fn transcribe_audio(video_id: &str, api_key: &str) -> Result<(), String> {
+async fn transcribe_audio(video_id: &str, api_key: &str, language: &str) -> Result<(), String> {
     println!("Transcribing audio...");
     println!("Video ID: {}", video_id);
     println!("API Key: {}", api_key);
+
+    remove_subtitles(video_id);
 
     let file_part = reqwest::multipart::Part::bytes(
         std::fs::read(format!("../public/{}.mp3", video_id)).unwrap(),
@@ -119,7 +200,7 @@ async fn transcribe_audio(video_id: &str, api_key: &str) -> Result<(), String> {
     let mut form = multipart::Form::new()
         .part("file", file_part)
         .text("response_format", "verbose_json")
-        .text("language", "en")
+        .text("language", language.to_lowercase())
         .text("model", "whisper-1");
 
     for granularity in timestamp_granularities {
@@ -140,10 +221,14 @@ async fn transcribe_audio(video_id: &str, api_key: &str) -> Result<(), String> {
 
     let vtt_words = convert_to_vtt(&json_data, "words");
     let vtt_segments = convert_to_vtt(&json_data, "segments");
+    let vtt_3_words = condense_subtitle(&vtt_words, 3).join("\n");
+    let vtt_4_words = condense_subtitle(&vtt_words, 4).join("\n");
 
     std::fs::write(format!("../public/{}.vtt", video_id), vtt_segments).unwrap();
     std::fs::write(format!("../public/{}_words.vtt", video_id), vtt_words).unwrap();
-
+    std::fs::write(format!("../public/{}_3words.vtt", video_id), vtt_3_words).unwrap();
+    std::fs::write(format!("../public/{}_4words.vtt", video_id), vtt_4_words).unwrap();
+    
     Ok(())
 }
 
@@ -420,7 +505,7 @@ fn vtt_line_to_pixel(video_id: &str, path: &str, video_height: i32) -> Result<St
                 .trim_end_matches('%')
                 .parse()
                 .map_err(|e| format!("Error parsing percentage: {}", e))?;
-            let pixels = ((1.0 - percentage / 100.0) * video_height as f32) as i32;
+            let pixels = ((1.0 - percentage / 92.0) * video_height as f32) as i32;
             let new_line = format!("{}line:{}%", parts[0], pixels);
             output.push_str(&new_line);
             output.push('\n');

@@ -50,13 +50,13 @@ export type DraggableEventHandler = (
 export interface DownloadButtonProps {
   subtitlesExist: boolean;
   videoId: string;
-  subtitleType: "words" | "segments" | "none";
+  subtitleType: "words" | "segments" | "3words" | "4words" | "none";
   videoRef: React.RefObject<HTMLVideoElement>;
 }
 
 export interface SubtitleOptionsProps {
-  type: "words" | "segments" | "none";
-  setType: (type: "words" | "segments" | "none") => void;
+  type: "words" | "segments" | "3words" | "4words" | "none";
+  setType: (type: "words" | "3words" | "4words" | "segments" | "none") => void;
   subtitlesExist: boolean;
 }
 
@@ -73,15 +73,20 @@ export interface ApiKeyComponentProps {
 }
 
 export interface VttTextAreaProps {
-  type: "segments" | "words" | "none";
+  type: "segments" | "words" | "3words" | "4words" | "none";
   reloadVideo: () => void;
 }
 
 export interface CueVtt {
   color: string;
   fontWeight: string;
-  background: string;
+  outlinecolor: string;
   fontFamily: string;
   textShadow: string;
   fontSize: string;
+}
+
+export interface LanguageSelectProps {
+  selectedLanguage: string;
+  setSelectedLanguage: (language: string) => void;
 }
