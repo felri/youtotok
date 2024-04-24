@@ -1,4 +1,4 @@
-import { SyntheticEvent } from "react";
+export type SubtitleStyle = "words" | "segments" | "3words" | "4words" | "none";
 
 export type Timings = {
   start: number;
@@ -50,13 +50,13 @@ export type DraggableEventHandler = (
 export interface DownloadButtonProps {
   subtitlesExist: boolean;
   videoId: string;
-  subtitleType: "words" | "segments" | "3words" | "4words" | "none";
+  subtitleType: SubtitleStyle
   videoRef: React.RefObject<HTMLVideoElement>;
 }
 
 export interface SubtitleOptionsProps {
-  type: "words" | "segments" | "3words" | "4words" | "none";
-  setType: (type: "words" | "3words" | "4words" | "segments" | "none") => void;
+  type: SubtitleStyle;
+  setType: (type: SubtitleStyle) => void;
   subtitlesExist: boolean;
 }
 
@@ -73,7 +73,7 @@ export interface ApiKeyComponentProps {
 }
 
 export interface VttTextAreaProps {
-  type: "segments" | "words" | "3words" | "4words" | "none";
+  type: SubtitleStyle;
   reloadVideo: () => void;
 }
 

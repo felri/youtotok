@@ -9,6 +9,7 @@ import {
   GenerateSubtitlesButtonProps,
   ApiKeyComponentProps,
   LanguageSelectProps,
+  SubtitleStyle,
 } from "../Editor/types";
 
 function LanguageSelect({
@@ -206,9 +207,7 @@ function SubtitlesPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [showVideo, setShowVideo] = useState(true);
   const [language, setLanguage] = useState("en");
-  const [subtitleType, setSubtitleType] = useState<
-    "words" | "3words" | "4words" | "segments" | "none"
-  >("none");
+  const [subtitleType, setSubtitleType] = useState<SubtitleStyle>("none");
 
   useEffect(() => {
     if (!videoId) {
@@ -260,7 +259,7 @@ function SubtitlesPage() {
     }, 100);
   }
 
-  async function enableSubtitle(type: "words" | "3words" | "4words" | "segments" | "none") {
+  async function enableSubtitle(type: SubtitleStyle) {
     const video = videoRef.current;
     if (!video) return;
 

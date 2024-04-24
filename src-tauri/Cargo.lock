@@ -3425,6 +3425,7 @@ dependencies = [
 [[package]]
 name = "rsubs-lib"
 version = "0.1.10"
+source = "git+https://github.com/felri/rsubs-lib.git#1403563fd0ca026fd033d22bf9aaea80672e2e11"
 dependencies = [
  "regex",
  "serde",

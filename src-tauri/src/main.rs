@@ -4,15 +4,9 @@ use reqwest::multipart;
 use rsubs_lib::vtt;
 use rusty_ytdl::{Video, VideoOptions, VideoQuality, VideoSearchOptions};
 use serde_json::Value;
-use std::io::BufRead;
+use std::io::{self, BufRead};
 use std::{fs, io::BufReader, path::Path, process::Command}; // Import the BufRead trait
 
-#[derive(Debug, Clone)]
-struct SubtitleLine {
-    start: String,
-    end: String,
-    text: String,
-}
 #[derive(Debug, serde::Deserialize)]
 struct Timing {
     start: f32,
@@ -113,6 +107,7 @@ fn remove_subtitles(video_id: &str) {
         format!("../public/{}.vtt", video_id),
         format!("../public/{}_words.vtt", video_id),
         format!("../public/{}_3words.vtt", video_id),
+        format!("../public/{}_4words.vtt", video_id),
         format!("../public/{}_segments.vtt", video_id),
         format!("../public/{}_pixel.vtt", video_id),
     ];
@@ -157,7 +152,7 @@ fn condense_subtitle(subtitle_text: &str, words_per_line: usize) -> Vec<String> 
         if parts.len() >= 3 {
             // Assuming the line is a timestamp line
             if current_line.len() >= words_per_line {
-                condensed_lines.push(format!("{} --> {} line:50%", start_time, end_time));
+                condensed_lines.push(format!("{} --> {}", start_time, end_time));
                 condensed_lines.push(current_line.join(" "));
                 condensed_lines.push("".to_owned());
                 current_line.clear();
@@ -228,7 +223,7 @@ async fn transcribe_audio(video_id: &str, api_key: &str, language: &str) -> Resu
     std::fs::write(format!("../public/{}_words.vtt", video_id), vtt_words).unwrap();
     std::fs::write(format!("../public/{}_3words.vtt", video_id), vtt_3_words).unwrap();
     std::fs::write(format!("../public/{}_4words.vtt", video_id), vtt_4_words).unwrap();
-    
+
     Ok(())
 }
 
@@ -540,29 +535,43 @@ fn vtt_to_ass(video_id: &str, sub_type: &str, video_height: i32) -> Result<(), S
     let file =
         fs::File::open(&output_path).map_err(|err| format!("Failed to open ASS file: {}", err))?;
     let reader = BufReader::new(file);
-
-    // Find the line where PlayResY: RESOLUTION is present
     let resolution_line_prefix = "PlayResY: ";
+    let dialogue_line_prefix = "Dialogue:";
     let mut modified_content = String::new();
-    let mut resolution_line_found = false;
+    let lines = reader
+        .lines()
+        .collect::<Result<Vec<_>, io::Error>>()
+        .map_err(|err| format!("Failed to read lines: {}", err))?;
 
-    for line in reader.lines() {
-        let line = line.map_err(|err| format!("Failed to read line: {}", err))?;
-
-        if line.starts_with(resolution_line_prefix) {
+    let mut i = 0;
+    while i < lines.len() {
+        if lines[i].starts_with(dialogue_line_prefix)
+            && i + 1 < lines.len()
+            && !lines[i + 1].starts_with(dialogue_line_prefix)
+            && !lines[i + 1].is_empty()
+        {
+            // Merge current dialogue line with the next line, appending \N in between
+            let merged_line = format!("{}\\N{}", lines[i], lines[i + 1]);
+            modified_content.push_str(&merged_line);
+            modified_content.push('\n');
+            // Skip the next line since it's already appended
+            i += 2;
+            continue;
+        } else if lines[i].starts_with(resolution_line_prefix) {
             // Replace the resolution value with video_height
             let new_line = format!("{}{}", resolution_line_prefix, video_height);
             modified_content.push_str(&new_line);
             modified_content.push('\n');
-            resolution_line_found = true;
         } else {
-            modified_content.push_str(&line);
+            // Normal line processing
+            modified_content.push_str(&lines[i]);
             modified_content.push('\n');
         }
+        i += 1;
     }
 
     // If the resolution line was not found, append it to the end
-    if !resolution_line_found {
+    if !modified_content.contains(resolution_line_prefix) {
         let new_line = format!("{}{}", resolution_line_prefix, video_height);
         modified_content.push_str(&new_line);
         modified_content.push('\n');

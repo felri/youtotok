@@ -50,17 +50,8 @@ function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
       }
       return acc;
     }, []);
-    // Remove 3 consecutive new lines
-    for (let i = 0; i < newLines.length; i++) {
-      if (
-        newLines[i] === "" &&
-        newLines[i + 1] === "" &&
-        newLines[i + 2] === ""
-      ) {
-        newLines.splice(i, 1);
-      }
-    }
-    let textWithoutStyle = newLines.join("\n");
+    // Remove 3 or more consecutive new lines
+    let textWithoutStyle = newLines.join("\n").replace(/\n{3,}/g, "\n\n");
 
     // Add styles
     lines = textWithoutStyle.split("\n");
@@ -97,6 +88,9 @@ function VttTextArea({ type, reloadVideo }: VttTextAreaProps) {
     if (finalText.length === 0) {
       return;
     }
+
+    // remove consecutive empty lines
+    finalText = finalText.replace(/\n{3,}/g, "\n\n");
 
     setText(finalText);
     saveVtt(finalText);
