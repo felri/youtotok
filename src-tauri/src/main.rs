@@ -656,8 +656,16 @@ async fn load_vtt(video_id: String, sub_type: String) -> Result<String, String> 
     Ok(vtt_content)
 }
 
+#[tauri::command]
+fn save_file_to_public_folder(local_file_path: &str, file_name: &str) -> Result<String, String> {
+    let file_path = std::path::Path::new("../public").join(file_name);
+    fs::copy(local_file_path, &file_path).map_err(|e| format!("Error copying file: {}", e))?;
+    Ok(file_path.to_str().unwrap().to_string())
+}
+
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             download_youtube_video,
@@ -667,7 +675,8 @@ fn main() {
             load_vtt,
             update_vtt,
             burn_subtitles,
-            clean_files
+            clean_files,
+            save_file_to_public_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
