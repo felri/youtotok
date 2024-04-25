@@ -658,21 +658,55 @@ async fn load_vtt(video_id: String, sub_type: String) -> Result<String, String> 
     Ok(vtt_content)
 }
 
+async fn process_uploaded_file(file_path: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let random_id: String = Uuid::new_v4().to_string();
+
+    let path = Path::new(file_path);
+    let extension = path.extension().and_then(std::ffi::OsStr::to_str);
+
+    let output: String = format!("../public/{}.mp4", random_id);
+
+    let mp4_filename = match extension {
+        Some("mp4") => {
+            // copy the file to the public folder with the random id as the filename
+            let file_path = Path::new(file_path);
+            tokio_fs::copy(file_path, &output).await?;
+            output
+        },
+        Some("webm") | Some("mkv") => {
+            // convert the file to mp4 and use the random id as the filename
+            let status = Command::new("ffmpeg")
+                .args(&["-i", file_path, &output])
+                .status()
+                .expect("Failed to execute ffmpeg");
+
+            if !status.success() {
+                return Err("Failed to convert file".into());
+            }
+            output
+        }
+        _ => return Err("Unsupported file format".into()),
+    };
+    println!("Processed file: {}", mp4_filename);
+
+    let audio_output = format!("../public/{}_full.mp3", random_id);
+
+    let status = Command::new("ffmpeg")
+        .args(&["-i", &mp4_filename, "-vn", "-acodec", "libmp3lame", &audio_output])
+        .status()
+        .expect("Failed to execute ffmpeg");
+
+    if !status.success() {
+        return Err("Failed to extract audio".into());
+    }
+
+    Ok(random_id)
+}
+
 #[tauri::command]
 async fn copy_file(filepath: &str) -> Result<String, Option<String>> {
-    let random_id = Uuid::new_v4().to_string();
-    let extension = std::path::Path::new(filepath)
-        .extension()
-        .and_then(std::ffi::OsStr::to_str)
-        .unwrap_or("");
-    let filename = format!("{}.{}", random_id, extension.to_lowercase());
-    let file_path = std::path::Path::new("../public").join(&filename);
-    let result = tokio_fs::copy(filepath, &file_path).await;
-
-    match result {
-        Ok(_) => Ok(random_id),
-        Err(e) => Err(Some(format!("Error copying file: {}", e))),
-    }
+    let id = process_uploaded_file(filepath).await.unwrap();
+    Ok(id)
 }
 
 fn main() {
