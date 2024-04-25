@@ -2,8 +2,8 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import { useLocation } from "wouter";
-import { FileUploader } from "react-drag-drop-files";
 import { open } from "@tauri-apps/plugin-dialog";
+import { AiOutlineLoading } from "react-icons/ai";
 
 function DropZone() {
   const [_, setLocation] = useLocation();
@@ -15,30 +15,37 @@ function DropZone() {
       multiple: false,
       filters: [
         {
-          name: 'Video',
-          extensions: ['mp4', 'webm', 'mkv'],
+          name: "Video",
+          extensions: ["mp4", "webm", "mkv"],
         },
       ],
     });
-    console.log(selected);
-    // if (selected) {
-    //   setLoading(true);
-    //   const path = await invoke<string>("upload_file", { file: selected });
-    //   setVideoId(path);
-    //   setLoading(false);
-    //   setLocation("/trim");
-    // }
+    if (selected) {
+      setLoading(true);
+      const videoId = await invoke<string>("copy_file", {
+        filepath: selected.path,
+      });
+      setVideoId(videoId);
+      setTimeout(() => {
+        setLoading(false);
+        setLocation("/trim");
+      }, 500);
+    }
   }
 
   return (
     <div className="flex flex-col items-center justify-center space-y-4 m-4">
       <label htmlFor="file-upload">Upload a video file:</label>
-      <div
-        onClick={onClick}
-        className="p-2 border border-gray-300 rounded-md w-80 cursor-pointer"
-      >
-        Click to upload
-      </div>
+      {loading ? (
+        <AiOutlineLoading className="animate-spin" />
+      ) : (
+        <div
+          onClick={onClick}
+          className="p-2 border border-gray-300 rounded-md w-80 cursor-pointer"
+        >
+          Click to upload
+        </div>
+      )}
     </div>
   );
 }
@@ -60,7 +67,7 @@ function DownloadPage() {
   return (
     <div className="container flex flex-col items-center justify-center">
       <DropZone />
-      <p className="text-2xl font-bold">OR</p>
+      <p className="font-bold">or</p>
       <form
         className="flex flex-col items-center justify-center space-y-4 m-4"
         onSubmit={(e) => {
@@ -76,7 +83,9 @@ function DownloadPage() {
           onChange={(e) => setUrl(e.currentTarget.value)}
           placeholder="Enter a youtube url..."
         />
-        <button type="submit">Edit</button>
+        <button type="submit" className="min-w-40 bg-green-800">
+          Trim
+        </button>
       </form>
       {loading && <p>Downloading...</p>}
     </div>

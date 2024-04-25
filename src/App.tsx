@@ -3,8 +3,6 @@ import Download from "./pages/Download";
 import Subtitles from "./pages/Subtitles";
 import Editor from "./pages/Editor";
 import NavBar from "./components/NavBar";
-import 'react-tooltip/dist/react-tooltip.css'
-
 
 export default function App() {
   return (

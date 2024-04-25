@@ -6,6 +6,8 @@ use rusty_ytdl::{Video, VideoOptions, VideoQuality, VideoSearchOptions};
 use serde_json::Value;
 use std::io::{self, BufRead};
 use std::{fs, io::BufReader, path::Path, process::Command}; // Import the BufRead trait
+use tokio::fs as tokio_fs;
+use uuid::Uuid;
 
 #[derive(Debug, serde::Deserialize)]
 struct Timing {
@@ -657,14 +659,25 @@ async fn load_vtt(video_id: String, sub_type: String) -> Result<String, String> 
 }
 
 #[tauri::command]
-fn save_file_to_public_folder(local_file_path: &str, file_name: &str) -> Result<String, String> {
-    let file_path = std::path::Path::new("../public").join(file_name);
-    fs::copy(local_file_path, &file_path).map_err(|e| format!("Error copying file: {}", e))?;
-    Ok(file_path.to_str().unwrap().to_string())
+async fn copy_file(filepath: &str) -> Result<String, Option<String>> {
+    let random_id = Uuid::new_v4().to_string();
+    let extension = std::path::Path::new(filepath)
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or("");
+    let filename = format!("{}.{}", random_id, extension.to_lowercase());
+    let file_path = std::path::Path::new("../public").join(&filename);
+    let result = tokio_fs::copy(filepath, &file_path).await;
+
+    match result {
+        Ok(_) => Ok(random_id),
+        Err(e) => Err(Some(format!("Error copying file: {}", e))),
+    }
 }
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
@@ -676,7 +689,7 @@ fn main() {
             update_vtt,
             burn_subtitles,
             clean_files,
-            save_file_to_public_folder
+            copy_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
