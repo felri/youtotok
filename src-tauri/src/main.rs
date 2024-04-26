@@ -309,8 +309,6 @@ async fn trim_video(
                 "[v{}]crop={}:{}:{}:{},scale=-1:1920,setpts=PTS-STARTPTS[v{}];",
                 i, width, height, x, y, i
             );
-        } else {
-            filter += &format!("[v{}]scale=1920:-1[v{}];", i, i);
         }
 
         filters.push(format!("[v{}][a{}]", i, i));
@@ -338,10 +336,10 @@ async fn trim_video(
         ])
         .output()
         .expect("failed to execute process");
+    
+    println!("FFmpeg Output: {:?}", &output);
 
     let output = String::from_utf8_lossy(&output.stdout);
-
-    println!("FFmpeg Output: {}", output);
 
     // extract audio
     let audio_format = "mp3";
@@ -537,6 +535,11 @@ fn vtt_line_to_pixel(video_id: &str, path: &str, video_height: i32) -> Result<St
 }
 
 fn vtt_to_ass(video_id: &str, sub_type: &str, video_height: i32) -> Result<(), String> {
+    let output_path = Path::new("../public/").join(format!("{}.ass", video_id));
+
+    // Try to delete the file if it exists, ignore the error if it does not
+    let _ = fs::remove_file(&output_path);
+
     let path = get_vtt_subtitle_path(&video_id, &sub_type);
     let output_path = vtt_line_to_pixel(&video_id, &path, video_height)?;
 
@@ -655,6 +658,8 @@ async fn burn_subtitles(
         .output()
         .expect("failed to execute process");
 
+    println!("{:?}", &output);
+    
     let output = String::from_utf8_lossy(&output.stdout);
 
     Ok(output.to_string())

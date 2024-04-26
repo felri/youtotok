@@ -693,7 +693,7 @@ function Editor({ videoUrl, trimVideo, loading, videoId }: EditorProps) {
         ref={parentVideoRef}
       >
         <video
-          className="video"
+          className="video max-h-[80vh] w-full"
           // autoload="metadata"
           muted={isMuted}
           ref={playVideoRef}
