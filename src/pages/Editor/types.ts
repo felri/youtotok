@@ -1,4 +1,4 @@
-export type SubtitleStyle = "words" | "segments" | "3words" | "4words" | "none";
+export type SubtitleStyle = "words" | "segments" | "3words" | "4words" | "5words" | "6words" | "none";
 
 export type Timings = {
   start: number;

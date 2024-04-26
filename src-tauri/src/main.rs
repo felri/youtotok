@@ -33,10 +33,11 @@ fn convert_to_vtt(json_data: &Value, subtitle_type: &str) -> String {
         let mut start_time = 0.0;
         let mut end_time = 0.0;
         let mut subtitle = String::new();
+        let mut word_count = 0;
 
         for word in words {
             if let Some(word_map) = word.as_object() {
-                let word_text = word_map
+                let segment_text = word_map
                     .get("word")
                     .or_else(|| word_map.get("text"))
                     .and_then(Value::as_str)
@@ -44,19 +45,27 @@ fn convert_to_vtt(json_data: &Value, subtitle_type: &str) -> String {
                 start_time = word_map.get("start").and_then(Value::as_f64).unwrap_or(0.0);
                 end_time = word_map.get("end").and_then(Value::as_f64).unwrap_or(0.0);
 
-                if word_text.trim().is_empty() {
+                if segment_text.trim().is_empty() {
                     continue;
                 }
 
-                subtitle.push_str(word_text);
-                subtitle.push(' ');
+                for word_text in segment_text.split_whitespace() {
+                    subtitle.push_str(word_text);
+                    word_count += 1;
+
+                    if word_count % 3 == 0 {
+                        subtitle.push_str("\n");
+                    } else {
+                        subtitle.push(' ');
+                    }
+                }
 
                 let start_time_str = format_time(start_time);
                 let end_time_str = format_time(end_time);
 
                 vtt_content.push_str(&format!(
                     "{} --> {}\n{}\n\n",
-                    start_time_str, end_time_str, subtitle
+                    start_time_str, end_time_str, subtitle.trim_end()
                 ));
                 subtitle.clear();
             }
@@ -65,7 +74,6 @@ fn convert_to_vtt(json_data: &Value, subtitle_type: &str) -> String {
 
     vtt_content
 }
-
 fn format_time(time: f64) -> String {
     let hours = (time / 3600.0) as u64;
     let minutes = ((time / 60.0) % 60.0) as u64;
@@ -154,8 +162,9 @@ fn condense_subtitle(subtitle_text: &str, words_per_line: usize) -> Vec<String> 
         if parts.len() >= 3 {
             // Assuming the line is a timestamp line
             if current_line.len() >= words_per_line {
+                let formatted_text = insert_line_breaks(&current_line, 3);
                 condensed_lines.push(format!("{} --> {}", start_time, end_time));
-                condensed_lines.push(current_line.join(" "));
+                condensed_lines.push(formatted_text);
                 condensed_lines.push("".to_owned());
                 current_line.clear();
             }
@@ -170,11 +179,17 @@ fn condense_subtitle(subtitle_text: &str, words_per_line: usize) -> Vec<String> 
 
     // Handle any remaining text
     if !current_line.is_empty() {
-        condensed_lines.push(format!("{} --> {} line:50%", start_time, end_time));
-        condensed_lines.push(current_line.join(" "));
+        let formatted_text = insert_line_breaks(&current_line, 3);
+        condensed_lines.push(format!("{} --> {}", start_time, end_time));
+        condensed_lines.push(formatted_text);
     }
 
     condensed_lines
+}
+
+// Helper function to insert line breaks every `n` words
+fn insert_line_breaks(words: &[String], n: usize) -> String {
+    words.chunks(n).map(|chunk| chunk.join(" ")).collect::<Vec<_>>().join(" \n")
 }
 
 #[tauri::command]
@@ -216,12 +231,16 @@ async fn transcribe_audio(video_id: &str, api_key: &str, language: &str) -> Resu
     let vtt_words = convert_to_vtt(&json_data, "words");
     let vtt_segments = convert_to_vtt(&json_data, "segments");
     let vtt_3_words = condense_subtitle(&vtt_words, 3).join("\n");
-    let vtt_4_words = condense_subtitle(&vtt_words, 4).join("\n");
+    let vtt_4_words: String = condense_subtitle(&vtt_words, 4).join("\n");
+    let vtt_5_words: String = condense_subtitle(&vtt_words, 5).join("\n");
+    let vtt_6_words: String = condense_subtitle(&vtt_words, 6).join("\n");
 
     std::fs::write(format!("../public/{}.vtt", video_id), vtt_segments).unwrap();
     std::fs::write(format!("../public/{}_words.vtt", video_id), vtt_words).unwrap();
     std::fs::write(format!("../public/{}_3words.vtt", video_id), vtt_3_words).unwrap();
     std::fs::write(format!("../public/{}_4words.vtt", video_id), vtt_4_words).unwrap();
+    std::fs::write(format!("../public/{}_5words.vtt", video_id), vtt_5_words).unwrap();
+    std::fs::write(format!("../public/{}_6words.vtt", video_id), vtt_6_words).unwrap();
 
     Ok(())
 }
@@ -287,9 +306,11 @@ async fn trim_video(
             let y = (video_height as f32 * dimensions.y / 100.0) as i32;
 
             filter += &format!(
-                "[v{}]crop={}:{}:{}:{},setpts=PTS-STARTPTS[v{}];",
+                "[v{}]crop={}:{}:{}:{},scale=-1:1920,setpts=PTS-STARTPTS[v{}];",
                 i, width, height, x, y, i
             );
+        } else {
+            filter += &format!("[v{}]scale=1920:-1[v{}];", i, i);
         }
 
         filters.push(format!("[v{}][a{}]", i, i));

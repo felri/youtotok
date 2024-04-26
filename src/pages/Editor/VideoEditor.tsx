@@ -20,7 +20,7 @@ function VideoEditor() {
 
   async function trimVideo(timings: Timings[], dimensions?: Dimensions) {
     setLoading(true);
-    const response = await invoke("trim_video", {
+    await invoke("trim_video", {
       videoId,
       timings,
       dimensions,

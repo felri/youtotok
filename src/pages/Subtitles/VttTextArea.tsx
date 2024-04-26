@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import TextArea from "../../components/TextArea";
 import { useStore } from "../../store";
 import { invoke } from "@tauri-apps/api/core";

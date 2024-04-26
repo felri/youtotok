@@ -26,11 +26,11 @@ function LanguageSelect({
           onChange={(e) => setSelectedLanguage(e.target.value)}
         >
           <option value="en">English</option>
+          <option value="pt">Portuguese</option>
           <option value="es">Spanish</option>
           <option value="fr">French</option>
           <option value="de">German</option>
           <option value="it">Italian</option>
-          <option value="pt">Portuguese</option>
           <option value="ja">Japanese</option>
           <option value="ko">Korean</option>
           <option value="zh">Chinese</option>
@@ -131,6 +131,22 @@ function SubtitleOptions({
       </button>
       <button
         className={`bg-green-900 text-white p-2 rounded-md w-30 ${
+          type === "5words" ? "!bg-green-500" : ""
+        }`}
+        onClick={() => setType("5words")}
+      >
+        5 WORDS
+      </button>
+      <button
+        className={`bg-green-900 text-white p-2 rounded-md w-30 ${
+          type === "6words" ? "!bg-green-500" : ""
+        }`}
+        onClick={() => setType("6words")}
+      >
+        6 WORDS
+      </button>
+      <button
+        className={`bg-green-900 text-white p-2 rounded-md w-30 ${
           type === "segments" ? "!bg-green-500" : ""
         }`}
         onClick={() => setType("segments")}
@@ -206,6 +222,7 @@ function SubtitlesPage() {
   const [subtitlesExist, setSubtitlesExist] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [showVideo, setShowVideo] = useState(true);
+  const [cacheBuster, setCacheBuster] = useState(Date.now());
   const [language, setLanguage] = useState("en");
   const [subtitleType, setSubtitleType] = useState<SubtitleStyle>("none");
 
@@ -213,6 +230,7 @@ function SubtitlesPage() {
     if (!videoId) {
       setLocation("/");
     }
+    setCacheBuster(Date.now());
     const storedApiKey = localStorage.getItem("openAiApiKey");
     if (storedApiKey) {
       setApiKey(storedApiKey);
@@ -308,7 +326,7 @@ function SubtitlesPage() {
               ref={videoRef}
               className="mx-auto"
             >
-              <source src={`./${videoId}_trimmed.mp4`} type="video/mp4" />
+              <source src={`./${videoId}_trimmed.mp4?${cacheBuster}`} type="video/mp4" />
               {subtitlesExist && (
                 <>
                   <track
@@ -328,6 +346,18 @@ function SubtitlesPage() {
                     kind="subtitles"
                     srcLang="en"
                     src={`./${videoId}_4words.vtt`}
+                  />
+                  <track
+                    label="5words"
+                    kind="subtitles"
+                    srcLang="en"
+                    src={`./${videoId}_5words.vtt`}
+                  />
+                  <track
+                    label="6words"
+                    kind="subtitles"
+                    srcLang="en"
+                    src={`./${videoId}_6words.vtt`}
                   />
                   <track
                     label="segments"

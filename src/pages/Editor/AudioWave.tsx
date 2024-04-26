@@ -38,10 +38,6 @@ function AudioWave({ videoId }: AudioWaveProps) {
     }
   }, []);
 
-  const play = useCallback(() => {
-    wavesurferRef.current?.playPause();
-  }, []);
-
   return (
     <div className="absolute top-0 left-0 right-0 bottom-0 z-20">
       <div className="relative h-[70px]">
